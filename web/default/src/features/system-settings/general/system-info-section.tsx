@@ -51,9 +51,11 @@ import { SettingsSection } from '../components/settings-section'
 import { useSettingsForm } from '../hooks/use-settings-form'
 import { useUpdateOption } from '../hooks/use-update-option'
 
+const FRONTEND_THEME = 'default' as const
+
 const _systemInfoSchema = z.object({
   theme: z.object({
-    frontend: z.enum(['default', 'classic']),
+    frontend: z.literal(FRONTEND_THEME),
   }),
   SystemName: z.string().min(1),
   ServerAddress: z.string().optional(),
@@ -84,8 +86,7 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
 
   const normalizedDefaults: SystemInfoFormValues = {
     theme: {
-      frontend:
-        defaultValues.theme?.frontend === 'classic' ? 'classic' : 'default',
+      frontend: FRONTEND_THEME,
     },
     SystemName: normalizeValue(defaultValues.SystemName),
     ServerAddress: normalizeValue(defaultValues.ServerAddress),
@@ -101,7 +102,7 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
 
   const systemInfoSchemaWithI18n = z.object({
     theme: z.object({
-      frontend: z.enum(['default', 'classic']),
+      frontend: z.literal(FRONTEND_THEME),
     }),
     SystemName: z.string().min(1, {
       error: () => t('System name is required'),
@@ -163,38 +164,27 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
                     <Select
                       items={[
                         {
-                          value: 'default',
+                          value: FRONTEND_THEME,
                           label: t('Default (New Frontend)'),
                         },
-                        {
-                          value: 'classic',
-                          label: t('Classic (Legacy Frontend)'),
-                        },
                       ]}
+                      disabled
                       onValueChange={field.onChange}
                       value={field.value}
                     >
                       <FormControl>
-                        <SelectTrigger className='w-full'>
+                        <SelectTrigger className='w-full' disabled>
                           <SelectValue />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent alignItemWithTrigger={false}>
                         <SelectGroup>
-                          <SelectItem value='default'>
+                          <SelectItem value={FRONTEND_THEME}>
                             {t('Default (New Frontend)')}
-                          </SelectItem>
-                          <SelectItem value='classic'>
-                            {t('Classic (Legacy Frontend)')}
                           </SelectItem>
                         </SelectGroup>
                       </SelectContent>
                     </Select>
-                    <FormDescription>
-                      {t(
-                        'Switch between the new frontend and the classic frontend. Changes take effect after page reload.'
-                      )}
-                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
