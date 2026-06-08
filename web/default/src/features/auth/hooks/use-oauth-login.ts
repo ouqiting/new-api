@@ -130,7 +130,11 @@ export function useOAuthLogin(status: SystemStatus | null) {
         return
       }
 
-      const url = buildDiscordOAuthUrl(status.discord_client_id, state)
+      const url = buildDiscordOAuthUrl(
+        status.discord_client_id,
+        state,
+        Boolean(status.discord_guild_verify_enabled)
+      )
       window.open(url, '_self')
     } catch (_error) {
       toast.error(t('Failed to start Discord login'))

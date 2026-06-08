@@ -2,19 +2,21 @@ package oauth
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/gin-gonic/gin"
 )
+
+const discordAPIBaseURL = "https://discord.com/api/v10"
 
 func init() {
 	Register("discord", &DiscordProvider{})
@@ -36,6 +38,10 @@ type discordUser struct {
 	UID  string `json:"id"`
 	ID   string `json:"username"`
 	Name string `json:"global_name"`
+}
+
+type discordGuildMember struct {
+	Roles []string `json:"roles"`
 }
 
 func (p *DiscordProvider) GetName() string {
@@ -64,7 +70,7 @@ func (p *DiscordProvider) ExchangeToken(ctx context.Context, code string, c *gin
 
 	logger.LogDebug(ctx, "[OAuth-Discord] ExchangeToken: redirect_uri=%s", redirectUri)
 
-	req, err := http.NewRequestWithContext(ctx, "POST", "https://discord.com/api/v10/oauth2/token", strings.NewReader(values.Encode()))
+	req, err := http.NewRequestWithContext(ctx, "POST", discordAPIBaseURL+"/oauth2/token", strings.NewReader(values.Encode()))
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +90,7 @@ func (p *DiscordProvider) ExchangeToken(ctx context.Context, code string, c *gin
 	logger.LogDebug(ctx, "[OAuth-Discord] ExchangeToken response status: %d", res.StatusCode)
 
 	var discordResponse discordOAuthResponse
-	err = json.NewDecoder(res.Body).Decode(&discordResponse)
+	err = common.DecodeJson(res.Body, &discordResponse)
 	if err != nil {
 		logger.LogError(ctx, fmt.Sprintf("[OAuth-Discord] ExchangeToken decode error: %s", err.Error()))
 		return nil, err
@@ -110,7 +116,7 @@ func (p *DiscordProvider) ExchangeToken(ctx context.Context, code string, c *gin
 func (p *DiscordProvider) GetUserInfo(ctx context.Context, token *OAuthToken) (*OAuthUser, error) {
 	logger.LogDebug(ctx, "[OAuth-Discord] GetUserInfo: fetching user info")
 
-	req, err := http.NewRequestWithContext(ctx, "GET", "https://discord.com/api/v10/users/@me", nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", discordAPIBaseURL+"/users/@me", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +140,7 @@ func (p *DiscordProvider) GetUserInfo(ctx context.Context, token *OAuthToken) (*
 	}
 
 	var discordUser discordUser
-	err = json.NewDecoder(res.Body).Decode(&discordUser)
+	err = common.DecodeJson(res.Body, &discordUser)
 	if err != nil {
 		logger.LogError(ctx, fmt.Sprintf("[OAuth-Discord] GetUserInfo decode error: %s", err.Error()))
 		return nil, err
@@ -145,6 +151,10 @@ func (p *DiscordProvider) GetUserInfo(ctx context.Context, token *OAuthToken) (*
 		return nil, NewOAuthError(i18n.MsgOAuthUserInfoEmpty, map[string]any{"Provider": "Discord"})
 	}
 
+	if err := p.verifyGuildAccess(ctx, token.AccessToken); err != nil {
+		return nil, err
+	}
+
 	logger.LogDebug(ctx, "[OAuth-Discord] GetUserInfo success: uid=%s, username=%s, name=%s", discordUser.UID, discordUser.ID, discordUser.Name)
 
 	return &OAuthUser{
@@ -152,6 +162,88 @@ func (p *DiscordProvider) GetUserInfo(ctx context.Context, token *OAuthToken) (*
 		Username:       discordUser.ID,
 		DisplayName:    discordUser.Name,
 	}, nil
+}
+
+func (p *DiscordProvider) verifyGuildAccess(ctx context.Context, accessToken string) error {
+	settings := system_setting.GetDiscordSettings()
+	if !settings.GuildVerifyEnabled {
+		return nil
+	}
+
+	requiredGuildID := strings.TrimSpace(settings.RequiredGuildId)
+	requiredRoleIDs := settings.RequiredRoleIdList()
+	if requiredGuildID == "" {
+		if len(requiredRoleIDs) == 0 {
+			return nil
+		}
+		logger.LogError(ctx, "[OAuth-Discord] role verification is enabled without a required guild id")
+		return &AccessDeniedError{Message: "Discord 身份组验证需要先配置服务器 ID"}
+	}
+
+	member, err := p.getGuildMember(ctx, accessToken, requiredGuildID)
+	if err != nil {
+		return err
+	}
+	if member == nil {
+		return &AccessDeniedError{Message: "您需要加入指定的 Discord 服务器才能登录或注册"}
+	}
+
+	if len(requiredRoleIDs) > 0 && !hasAnyDiscordRole(member.Roles, requiredRoleIDs) {
+		return &AccessDeniedError{Message: "您需要拥有指定的 Discord 身份组才能登录或注册"}
+	}
+
+	return nil
+}
+
+func (p *DiscordProvider) getGuildMember(ctx context.Context, accessToken string, guildID string) (*discordGuildMember, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("%s/users/@me/guilds/%s/member", discordAPIBaseURL, url.PathEscape(guildID)), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Accept", "application/json")
+
+	client := http.Client{
+		Timeout: 5 * time.Second,
+	}
+	res, err := client.Do(req)
+	if err != nil {
+		logger.LogError(ctx, fmt.Sprintf("[OAuth-Discord] GetGuildMember error: %s", err.Error()))
+		return nil, NewOAuthErrorWithRaw(i18n.MsgOAuthConnectFailed, map[string]any{"Provider": "Discord"}, err.Error())
+	}
+	defer res.Body.Close()
+
+	logger.LogDebug(ctx, "[OAuth-Discord] GetGuildMember response status: %d", res.StatusCode)
+
+	switch res.StatusCode {
+	case http.StatusOK:
+		var member discordGuildMember
+		if err := common.DecodeJson(res.Body, &member); err != nil {
+			logger.LogError(ctx, fmt.Sprintf("[OAuth-Discord] GetGuildMember decode error: %s", err.Error()))
+			return nil, err
+		}
+		return &member, nil
+	case http.StatusNotFound:
+		return nil, nil
+	case http.StatusUnauthorized, http.StatusForbidden:
+		return nil, &AccessDeniedError{Message: "Discord 授权缺少服务器或身份组读取权限，请重新登录授权"}
+	default:
+		logger.LogError(ctx, fmt.Sprintf("[OAuth-Discord] GetGuildMember failed: status=%d", res.StatusCode))
+		return nil, NewOAuthErrorWithRaw(i18n.MsgOAuthGetUserErr, map[string]any{"Provider": "Discord"}, fmt.Sprintf("guild member status %d", res.StatusCode))
+	}
+}
+
+func hasAnyDiscordRole(userRoleIDs []string, requiredRoleIDs []string) bool {
+	userRoles := make(map[string]struct{}, len(userRoleIDs))
+	for _, roleID := range userRoleIDs {
+		userRoles[roleID] = struct{}{}
+	}
+	for _, roleID := range requiredRoleIDs {
+		if _, ok := userRoles[roleID]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 func (p *DiscordProvider) IsUserIDTaken(providerUserID string) bool {

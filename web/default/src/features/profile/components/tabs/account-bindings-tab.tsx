@@ -201,7 +201,10 @@ export function AccountBindingsTab({
         isEnabled: status?.discord_oauth || false,
         onBind: () => {
           if (status?.discord_client_id) {
-            handleDiscordOAuth(status.discord_client_id)
+            handleDiscordOAuth(
+              status.discord_client_id,
+              Boolean(status.discord_guild_verify_enabled)
+            )
           }
         },
       },

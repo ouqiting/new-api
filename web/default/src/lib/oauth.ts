@@ -32,15 +32,23 @@ export function buildGitHubOAuthUrl(clientId: string, state: string): string {
 /**
  * Build Discord OAuth URL
  */
-export function buildDiscordOAuthUrl(clientId: string, state: string): string {
+export function buildDiscordOAuthUrl(
+  clientId: string,
+  state: string,
+  guildVerifyEnabled = false
+): string {
   const url = new URL('https://discord.com/oauth2/authorize')
+  const scopes = guildVerifyEnabled
+    ? ['identify', 'openid', 'guilds', 'guilds.members.read']
+    : ['identify', 'openid']
+
   url.searchParams.set('client_id', clientId)
   url.searchParams.set(
     'redirect_uri',
     `${window.location.origin}/oauth/discord`
   )
   url.searchParams.set('response_type', 'code')
-  url.searchParams.set('scope', 'identify+openid')
+  url.searchParams.set('scope', scopes.join(' '))
   url.searchParams.set('state', state)
   return url.toString()
 }
@@ -110,11 +118,14 @@ export async function handleGitHubOAuth(clientId: string): Promise<void> {
 /**
  * Handle Discord OAuth binding/login
  */
-export async function handleDiscordOAuth(clientId: string): Promise<void> {
+export async function handleDiscordOAuth(
+  clientId: string,
+  guildVerifyEnabled = false
+): Promise<void> {
   const state = await getOAuthState()
   if (!state) return
 
-  const url = buildDiscordOAuthUrl(clientId, state)
+  const url = buildDiscordOAuthUrl(clientId, state, guildVerifyEnabled)
   window.open(url, '_blank')
 }
 

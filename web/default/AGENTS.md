@@ -57,6 +57,7 @@
 ### 3.1 国际化
 
 - **页面文本**：所有面向用户的文案均需支持 i18n，使用 `useTranslation()` 的 `t()` 进行翻译。
+- **支持语言**：当前仅维护英文 `en` 与简体中文 `zh`；新增文案只需同步 `src/i18n/locales/en.json` 和 `src/i18n/locales/zh.json`。
 - **使用场景**  
   - **React 组件**：必须使用 `const { t } = useTranslation()`，以保证语言切换时组件会重新渲染。  
   - **非 React 环境**（工具函数、常量、类方法）：可使用 `import { t } from 'i18next'`；此类用法不会随语言切换自动更新，仅在不依赖响应式更新的场景使用。  

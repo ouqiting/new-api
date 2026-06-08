@@ -25,6 +25,9 @@ import type { UpdateOptionRequest } from '../types'
 // Configuration keys that require status refresh
 const STATUS_RELATED_KEYS = [
   'theme.frontend',
+  'discord.guild_verify_enabled',
+  'discord.required_guild_id',
+  'discord.required_role_ids',
   'HeaderNavModules',
   'SidebarModulesAdmin',
   'Notice',

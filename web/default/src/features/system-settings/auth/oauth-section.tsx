@@ -33,6 +33,7 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
+import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { FormDirtyIndicator } from '../components/form-dirty-indicator'
@@ -60,6 +61,9 @@ const oauthSchema = z.object({
     enabled: z.boolean(),
     client_id: z.string(),
     client_secret: z.string(),
+    guild_verify_enabled: z.boolean(),
+    required_guild_id: z.string(),
+    required_role_ids: z.string(),
   }),
   oidc: z.object({
     enabled: z.boolean(),
@@ -92,6 +96,9 @@ type FlatOAuthDefaults = {
   'discord.enabled': boolean
   'discord.client_id': string
   'discord.client_secret': string
+  'discord.guild_verify_enabled': boolean
+  'discord.required_guild_id': string
+  'discord.required_role_ids': string
   'oidc.enabled': boolean
   'oidc.client_id': string
   'oidc.client_secret': string
@@ -123,6 +130,9 @@ const buildFormDefaults = (defaults: FlatOAuthDefaults): OAuthFormValues => ({
     enabled: defaults['discord.enabled'],
     client_id: defaults['discord.client_id'] ?? '',
     client_secret: defaults['discord.client_secret'] ?? '',
+    guild_verify_enabled: defaults['discord.guild_verify_enabled'],
+    required_guild_id: defaults['discord.required_guild_id'] ?? '',
+    required_role_ids: defaults['discord.required_role_ids'] ?? '',
   },
   oidc: {
     enabled: defaults['oidc.enabled'],
@@ -153,6 +163,9 @@ const normalizeFormValues = (values: OAuthFormValues): FlatOAuthDefaults => ({
   'discord.enabled': values.discord.enabled,
   'discord.client_id': values.discord.client_id,
   'discord.client_secret': values.discord.client_secret,
+  'discord.guild_verify_enabled': values.discord.guild_verify_enabled,
+  'discord.required_guild_id': values.discord.required_guild_id,
+  'discord.required_role_ids': values.discord.required_role_ids,
   'oidc.enabled': values.oidc.enabled,
   'oidc.client_id': values.oidc.client_id,
   'oidc.client_secret': values.oidc.client_secret,
@@ -191,6 +204,9 @@ export function OAuthSection(props: OAuthSectionProps) {
     resolver: zodResolver(oauthSchema),
     defaultValues: formDefaults,
   })
+  const isDiscordGuildVerifyEnabled = form.watch(
+    'discord.guild_verify_enabled'
+  )
 
   const baselineRef = useRef<FlatOAuthDefaults>(props.defaultValues)
   const baselineSerializedRef = useRef<string>(
@@ -445,6 +461,97 @@ export function OAuthSection(props: OAuthSectionProps) {
                     </FormItem>
                   )}
                 />
+
+                <div className='lg:col-span-2'>
+                  <Separator />
+                </div>
+
+                <FormField
+                  control={form.control}
+                  name='discord.guild_verify_enabled'
+                  render={({ field }) => (
+                    <SettingsSwitchItem>
+                      <SettingsSwitchContent>
+                        <FormLabel>
+                          {t('Enable Discord identity verification')}
+                        </FormLabel>
+                        <FormDescription>
+                          {t(
+                            'Require Discord users to join a server or hold a role before sign-in'
+                          )}
+                        </FormDescription>
+                      </SettingsSwitchContent>
+                      <FormControl>
+                        <Switch
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      </FormControl>
+                    </SettingsSwitchItem>
+                  )}
+                />
+
+                {isDiscordGuildVerifyEnabled && (
+                  <>
+                    <FormField
+                      control={form.control}
+                      name='discord.required_guild_id'
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{t('Required Discord Server ID')}</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder={t('Your Discord server ID')}
+                              autoComplete='off'
+                              value={field.value ?? ''}
+                              onChange={(event) =>
+                                field.onChange(event.target.value)
+                              }
+                              name={field.name}
+                              onBlur={field.onBlur}
+                              ref={field.ref}
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            {t(
+                              'Discord users must be members of this server to sign in or register'
+                            )}
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name='discord.required_role_ids'
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{t('Required Discord Role IDs')}</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder={t('Discord role ID(s)')}
+                              autoComplete='off'
+                              value={field.value ?? ''}
+                              onChange={(event) =>
+                                field.onChange(event.target.value)
+                              }
+                              name={field.name}
+                              onBlur={field.onBlur}
+                              ref={field.ref}
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            {t(
+                              'Use commas for multiple role IDs. Users must have at least one listed role.'
+                            )}
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </>
+                )}
               </TabsContent>
 
               <TabsContent value='oidc' className={oauthTabContentClassName}>
