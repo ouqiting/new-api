@@ -25,7 +25,7 @@ For commercial licensing, please contact support@quantumnous.com
  * - Chained properties: "OpenAI.Avatar.type={'platform'}"
  * - Size parameter: getLobeIcon("OpenAI", 20)
  */
-import * as LobeIcons from '@lobehub/icons'
+import * as LobeIcons from '@lobehub/icons/es/icons'
 
 /**
  * Parse a property value from string to appropriate type
