@@ -60,6 +60,7 @@ func (user *User) ToBaseUser() *UserBase {
 		Id:       user.Id,
 		Group:    user.Group,
 		Quota:    user.Quota,
+		Role:     user.Role,
 		Status:   user.Status,
 		Username: user.Username,
 		Setting:  user.Setting,
@@ -728,6 +729,19 @@ func IsAdmin(userId int) bool {
 		return false
 	}
 	return user.Role >= common.RoleAdminUser
+}
+
+func IsRootUser(userId int) bool {
+	if userId == 0 {
+		return false
+	}
+	var user User
+	err := DB.Where("id = ?", userId).Select("role").Find(&user).Error
+	if err != nil {
+		common.SysLog("no such user " + err.Error())
+		return false
+	}
+	return user.Role == common.RoleRootUser
 }
 
 //// IsUserEnabled checks user status from Redis first, falls back to DB if needed

@@ -10,6 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/common/limiter"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting"
 
 	"github.com/gin-gonic/gin"
@@ -163,11 +164,26 @@ func memoryRateLimitHandler(duration int64, totalMaxCount, successMaxCount int) 
 	}
 }
 
+func isRootUserRateLimitExempt(c *gin.Context) bool {
+	role := c.GetInt("role")
+	if role == common.RoleRootUser {
+		return true
+	}
+	if role != 0 {
+		return false
+	}
+	return model.IsRootUser(c.GetInt("id"))
+}
+
 // ModelRequestRateLimit 模型请求限流中间件
 func ModelRequestRateLimit() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		// 在每个请求时检查是否启用限流
 		if !setting.ModelRequestRateLimitEnabled {
+			c.Next()
+			return
+		}
+		if isRootUserRateLimitExempt(c) {
 			c.Next()
 			return
 		}
