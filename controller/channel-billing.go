@@ -381,22 +381,35 @@ func updateChannelMoonshotBalance(channel *model.Channel) (float64, error) {
 
 const maxParallelBalanceQueries = 40
 
+type channelBalanceUpdateResult struct {
+	Balance      float64
+	SuccessCount int
+	FailedCount  int
+	TotalCount   int
+	IsMultiKey   bool
+}
+
 func updateChannelBalanceForKey(channel *model.Channel, key string) (float64, error) {
 	channelCopy := *channel
 	channelCopy.Key = key
 	return doUpdateChannelBalance(&channelCopy)
 }
 
-func updateMultiKeyChannelBalance(channel *model.Channel) (float64, error) {
+func updateMultiKeyChannelBalance(channel *model.Channel) (channelBalanceUpdateResult, error) {
 	keys := channel.GetKeys()
+	result := channelBalanceUpdateResult{
+		TotalCount: len(keys),
+		IsMultiKey: true,
+	}
 	if len(keys) == 0 {
-		return 0, errors.New("no keys available")
+		return result, errors.New("no keys available")
 	}
 
 	ctx := context.Background()
 	sem := semaphore.NewWeighted(maxParallelBalanceQueries)
 	var mu sync.Mutex
 	var totalBalance float64
+	var successCount int
 	var failedCount int
 	var wg sync.WaitGroup
 
@@ -429,28 +442,35 @@ func updateMultiKeyChannelBalance(channel *model.Channel) (float64, error) {
 			}
 			mu.Lock()
 			totalBalance += balance
+			successCount++
 			mu.Unlock()
 		}(idx, key)
 	}
 	wg.Wait()
 
-	if failedCount == len(keys) {
-		return 0, fmt.Errorf("all keys failed to update balance for channel %d", channel.Id)
+	result.Balance = totalBalance
+	result.SuccessCount = successCount
+	result.FailedCount = failedCount
+	if successCount == 0 {
+		return result, fmt.Errorf("all keys failed to update balance for channel %d", channel.Id)
 	}
 	channel.UpdateBalance(totalBalance)
-	return totalBalance, nil
+	return result, nil
 }
 
-func updateChannelBalance(channel *model.Channel) (float64, error) {
+func updateChannelBalance(channel *model.Channel) (channelBalanceUpdateResult, error) {
 	if channel.ChannelInfo.IsMultiKey {
 		return updateMultiKeyChannelBalance(channel)
 	}
 	balance, err := doUpdateChannelBalance(channel)
+	result := channelBalanceUpdateResult{Balance: balance}
 	if err != nil {
-		return 0, err
+		return result, err
 	}
 	channel.UpdateBalance(balance)
-	return balance, nil
+	result.SuccessCount = 1
+	result.TotalCount = 1
+	return result, nil
 }
 
 func doUpdateChannelBalance(channel *model.Channel) (float64, error) {
@@ -530,15 +550,27 @@ func UpdateChannelBalance(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	balance, err := updateChannelBalance(channel)
+	result, err := updateChannelBalance(channel)
 	if err != nil {
+		if result.IsMultiKey && result.TotalCount > 0 {
+			c.JSON(http.StatusOK, gin.H{
+				"success":       false,
+				"message":       err.Error(),
+				"balance":       result.Balance,
+				"success_count": result.SuccessCount,
+				"failed_count":  result.FailedCount,
+			})
+			return
+		}
 		common.ApiError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-		"balance": balance,
+		"success":       true,
+		"message":       "",
+		"balance":       result.Balance,
+		"success_count": result.SuccessCount,
+		"failed_count":  result.FailedCount,
 	})
 }
 
@@ -555,12 +587,12 @@ func updateAllChannelsBalance() error {
 		//if channel.Type != common.ChannelTypeOpenAI && channel.Type != common.ChannelTypeCustom {
 		//	continue
 		//}
-		balance, err := updateChannelBalance(channel)
+		result, err := updateChannelBalance(channel)
 		if err != nil {
 			continue
 		} else {
 			// err is nil & balance <= 0 means quota is used up
-			if balance <= 0 {
+			if result.Balance <= 0 {
 				service.DisableChannel(*types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, "", channel.GetAutoBan()), "余额不足")
 			}
 		}

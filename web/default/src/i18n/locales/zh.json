@@ -3139,6 +3139,7 @@
     "Quantity": "数量",
     "QuantumNous": "QuantumNous",
     "Query Balance": "查询余额",
+    "Query completed, {{success}} succeeded, {{failed}} failed": "查询完成，成功{{success}}个，失败{{failed}}个",
     "Query Param": "请求参数",
     "Querying...": "正在查询...",
     "Question": "问题",

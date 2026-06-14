@@ -87,13 +87,32 @@ export function BalanceQueryDialog({
     setIsQuerying(true)
     try {
       const response = await updateChannelBalance(currentRow.id)
+      const hasMultiKeyStats =
+        currentRow.channel_info?.is_multi_key &&
+        response.success_count !== undefined &&
+        response.failed_count !== undefined
+      const multiKeyStatsMessage = hasMultiKeyStats
+        ? t('Query completed, {{success}} succeeded, {{failed}} failed', {
+            success: response.success_count,
+            failed: response.failed_count,
+          })
+        : ''
+
       if (response.success && response.balance !== undefined) {
         const newBalance = response.balance
         const now = Math.floor(Date.now() / 1000)
 
         setBalance(newBalance)
         setBalanceUpdatedTime(now)
-        toast.success(t('Balance updated successfully'))
+        if (hasMultiKeyStats) {
+          if (response.failed_count && response.failed_count > 0) {
+            toast.warning(multiKeyStatsMessage)
+          } else {
+            toast.success(multiKeyStatsMessage)
+          }
+        } else {
+          toast.success(t('Balance updated successfully'))
+        }
 
         // Update currentRow immediately with new balance and timestamp
         setCurrentRow({
@@ -107,7 +126,11 @@ export function BalanceQueryDialog({
           queryKey: channelsQueryKeys.lists(),
         })
       } else {
-        toast.error(response.message || t('Failed to query balance'))
+        toast.error(
+          hasMultiKeyStats
+            ? multiKeyStatsMessage
+            : response.message || t('Failed to query balance')
+        )
       }
     } catch (error: unknown) {
       toast.error(

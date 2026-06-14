@@ -3139,6 +3139,7 @@
     "Quantity": "Quantity",
     "QuantumNous": "QuantumNous",
     "Query Balance": "Query Balance",
+    "Query completed, {{success}} succeeded, {{failed}} failed": "Query completed, {{success}} succeeded, {{failed}} failed",
     "Query Param": "Query Param",
     "Querying...": "Querying...",
     "Question": "Question",
