@@ -66,6 +66,8 @@ type ChannelInfo struct {
 	MultiKeyDisabledReason map[int]string        `json:"multi_key_disabled_reason,omitempty"` // key禁用原因列表，key index -> reason
 	MultiKeyDisabledTime   map[int]int64         `json:"multi_key_disabled_time,omitempty"`   // key禁用时间列表，key index -> time
 	MultiKeyPollingIndex   int                   `json:"multi_key_polling_index"`             // 多Key模式下轮询的key索引
+	MultiKeyFillFirstIndex *int                  `json:"multi_key_fill_first_index,omitempty"`
+	MultiKeyFillFirstFail  *int                  `json:"multi_key_fill_first_fail,omitempty"`
 	MultiKeyMode           constant.MultiKeyMode `json:"multi_key_mode"`
 }
 
@@ -243,6 +245,36 @@ func (channel *Channel) GetNextEnabledKey() (string, int, *types.NewAPIError) {
 	case constant.MultiKeyModeRandom:
 		// Randomly pick one enabled key
 		selectedIdx := enabledIdx[rand.Intn(len(enabledIdx))]
+		return keys[selectedIdx], selectedIdx, nil
+	case constant.MultiKeyModeFillFirst:
+		if channel.ChannelInfo.MultiKeyFillFirstIndex != nil {
+			selectedIdx := *channel.ChannelInfo.MultiKeyFillFirstIndex
+			if selectedIdx >= 0 && selectedIdx < len(keys) && getStatus(selectedIdx) == common.ChannelStatusEnabled {
+				return keys[selectedIdx], selectedIdx, nil
+			}
+		}
+
+		candidates := enabledIdx
+		if failedIdx := channel.ChannelInfo.MultiKeyFillFirstFail; failedIdx != nil && len(enabledIdx) > 1 {
+			filtered := make([]int, 0, len(enabledIdx)-1)
+			for _, idx := range enabledIdx {
+				if idx != *failedIdx {
+					filtered = append(filtered, idx)
+				}
+			}
+			if len(filtered) > 0 {
+				candidates = filtered
+			}
+		}
+
+		selectedIdx := candidates[rand.Intn(len(candidates))]
+		channel.ChannelInfo.MultiKeyFillFirstIndex = &selectedIdx
+		channel.ChannelInfo.MultiKeyFillFirstFail = nil
+		if !common.MemoryCacheEnabled {
+			if err := channel.SaveChannelInfo(); err != nil {
+				return "", 0, types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
+			}
+		}
 		return keys[selectedIdx], selectedIdx, nil
 	case constant.MultiKeyModePolling:
 		// Use channel-specific lock to ensure thread-safe polling
@@ -665,6 +697,9 @@ func handlerMultiKeyUpdate(channel *Channel, usingKey string, status int, reason
 		if channel.ChannelInfo.MultiKeyStatusList == nil {
 			channel.ChannelInfo.MultiKeyStatusList = make(map[int]int)
 		}
+		if channel.ChannelInfo.MultiKeyMode == constant.MultiKeyModeFillFirst && status != common.ChannelStatusEnabled {
+			clearMultiKeyFillFirstIndex(channel, keyIndex)
+		}
 		if status == common.ChannelStatusEnabled {
 			delete(channel.ChannelInfo.MultiKeyStatusList, keyIndex)
 		} else {
@@ -688,6 +723,69 @@ func handlerMultiKeyUpdate(channel *Channel, usingKey string, status int, reason
 			channel.Status = common.ChannelStatusEnabled
 		}
 	}
+}
+
+func clearMultiKeyFillFirstIndex(channel *Channel, keyIndex int) bool {
+	if !channel.ChannelInfo.IsMultiKey || channel.ChannelInfo.MultiKeyMode != constant.MultiKeyModeFillFirst || keyIndex < 0 {
+		return false
+	}
+
+	changed := false
+	if channel.ChannelInfo.MultiKeyFillFirstIndex != nil && *channel.ChannelInfo.MultiKeyFillFirstIndex == keyIndex {
+		channel.ChannelInfo.MultiKeyFillFirstIndex = nil
+		changed = true
+	}
+	if channel.ChannelInfo.MultiKeyFillFirstFail == nil || *channel.ChannelInfo.MultiKeyFillFirstFail != keyIndex {
+		failedIdx := keyIndex
+		channel.ChannelInfo.MultiKeyFillFirstFail = &failedIdx
+		changed = true
+	}
+	return changed
+}
+
+func ReleaseMultiKeyFillFirstKey(channelId int, usingKey string) bool {
+	if usingKey == "" {
+		return false
+	}
+
+	release := func(channel *Channel) bool {
+		keys := channel.GetKeys()
+		for i, key := range keys {
+			if key == usingKey {
+				return clearMultiKeyFillFirstIndex(channel, i)
+			}
+		}
+		return false
+	}
+
+	if common.MemoryCacheEnabled {
+		channelCache, _ := CacheGetChannel(channelId)
+		if channelCache == nil {
+			return false
+		}
+		pollingLock := GetChannelPollingLock(channelId)
+		pollingLock.Lock()
+		changed := release(channelCache)
+		pollingLock.Unlock()
+		return changed
+	}
+
+	channel, err := GetChannelById(channelId, true)
+	if err != nil {
+		return false
+	}
+	pollingLock := GetChannelPollingLock(channelId)
+	pollingLock.Lock()
+	changed := release(channel)
+	pollingLock.Unlock()
+	if !changed {
+		return false
+	}
+	if err := channel.SaveChannelInfo(); err != nil {
+		common.SysLog(fmt.Sprintf("failed to release fill-first multi-key: channel_id=%d, error=%v", channelId, err))
+		return false
+	}
+	return true
 }
 
 func hasEnabledMultiKey(keys []string, statusList map[int]int) bool {

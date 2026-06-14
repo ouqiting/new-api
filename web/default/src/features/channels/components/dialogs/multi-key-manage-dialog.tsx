@@ -238,6 +238,8 @@ export function MultiKeyManageDialog({
                 label={
                   currentRow.channel_info.multi_key_mode === 'random'
                     ? t('Random')
+                    : currentRow.channel_info.multi_key_mode === 'fill_first'
+                      ? t('Fill First')
                     : t('Polling')
                 }
                 variant='neutral'

@@ -185,6 +185,7 @@ export const MULTI_KEY_STATUS_CONFIG = {
 export const MULTI_KEY_MODES = [
   { value: 'random', label: 'Random' },
   { value: 'polling', label: 'Polling' },
+  { value: 'fill_first', label: 'Fill First' },
 ] as const
 
 export const ADD_MODE_OPTIONS = [
@@ -367,7 +368,7 @@ export const FIELD_DESCRIPTIONS = {
   SETTING: 'Channel-specific settings (JSON format)',
   PARAM_OVERRIDE: 'Override request parameters (JSON format)',
   HEADER_OVERRIDE: 'Override request headers (JSON format)',
-  MULTI_KEY_MODE: 'How to select keys: random or sequential polling',
+  MULTI_KEY_MODE: 'How to select keys: random, sequential polling, or fill first',
   BATCH_ADD: 'Create multiple channels from multiple keys',
   OPENAI_ORG: 'OpenAI Organization ID (optional)',
 } as const

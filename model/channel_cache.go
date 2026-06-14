@@ -78,6 +78,13 @@ func InitChannelCache() {
 						channel.ChannelInfo.MultiKeyPollingIndex = oldChannel.ChannelInfo.MultiKeyPollingIndex
 					}
 				}
+			} else if channel.ChannelInfo.MultiKeyMode == constant.MultiKeyModeFillFirst {
+				if oldChannel, ok := channelsIDM[i]; ok {
+					if oldChannel.ChannelInfo.IsMultiKey && oldChannel.ChannelInfo.MultiKeyMode == constant.MultiKeyModeFillFirst {
+						channel.ChannelInfo.MultiKeyFillFirstIndex = oldChannel.ChannelInfo.MultiKeyFillFirstIndex
+						channel.ChannelInfo.MultiKeyFillFirstFail = oldChannel.ChannelInfo.MultiKeyFillFirstFail
+					}
+				}
 			}
 		}
 	}
