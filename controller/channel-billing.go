@@ -1,12 +1,14 @@
 package controller
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -17,6 +19,7 @@ import (
 	"github.com/QuantumNous/new-api/types"
 
 	"github.com/shopspring/decimal"
+	"golang.org/x/sync/semaphore"
 
 	"github.com/gin-gonic/gin"
 )
@@ -178,7 +181,6 @@ func updateChannelCloseAIBalance(channel *model.Channel) (float64, error) {
 	if err != nil {
 		return 0, err
 	}
-	channel.UpdateBalance(response.TotalAvailable)
 	return response.TotalAvailable, nil
 }
 
@@ -200,7 +202,6 @@ func updateChannelOpenAISBBalance(channel *model.Channel) (float64, error) {
 	if err != nil {
 		return 0, err
 	}
-	channel.UpdateBalance(balance)
 	return balance, nil
 }
 
@@ -220,7 +221,6 @@ func updateChannelAIProxyBalance(channel *model.Channel) (float64, error) {
 	if !response.Success {
 		return 0, fmt.Errorf("code: %d, message: %s", response.ErrorCode, response.Message)
 	}
-	channel.UpdateBalance(response.Data.TotalPoints)
 	return response.Data.TotalPoints, nil
 }
 
@@ -236,7 +236,6 @@ func updateChannelAPI2GPTBalance(channel *model.Channel) (float64, error) {
 	if err != nil {
 		return 0, err
 	}
-	channel.UpdateBalance(response.TotalRemaining)
 	return response.TotalRemaining, nil
 }
 
@@ -258,7 +257,6 @@ func updateChannelSiliconFlowBalance(channel *model.Channel) (float64, error) {
 	if err != nil {
 		return 0, err
 	}
-	channel.UpdateBalance(balance)
 	return balance, nil
 }
 
@@ -287,7 +285,6 @@ func updateChannelDeepSeekBalance(channel *model.Channel) (float64, error) {
 	if err != nil {
 		return 0, err
 	}
-	channel.UpdateBalance(balance)
 	return balance, nil
 }
 
@@ -302,7 +299,6 @@ func updateChannelAIGC2DBalance(channel *model.Channel) (float64, error) {
 	if err != nil {
 		return 0, err
 	}
-	channel.UpdateBalance(response.TotalAvailable)
 	return response.TotalAvailable, nil
 }
 
@@ -318,7 +314,6 @@ func updateChannelOpenRouterBalance(channel *model.Channel) (float64, error) {
 		return 0, err
 	}
 	balance := response.Data.TotalCredits - response.Data.TotalUsage
-	channel.UpdateBalance(balance)
 	return balance, nil
 }
 
@@ -352,11 +347,84 @@ func updateChannelMoonshotBalance(channel *model.Channel) (float64, error) {
 	}
 	availableBalanceCny := response.Data.AvailableBalance
 	availableBalanceUsd := decimal.NewFromFloat(availableBalanceCny).Div(decimal.NewFromFloat(operation_setting.Price)).InexactFloat64()
-	channel.UpdateBalance(availableBalanceUsd)
 	return availableBalanceUsd, nil
 }
 
+const maxParallelBalanceQueries = 40
+
+func updateChannelBalanceForKey(channel *model.Channel, key string) (float64, error) {
+	channelCopy := *channel
+	channelCopy.Key = key
+	return doUpdateChannelBalance(&channelCopy)
+}
+
+func updateMultiKeyChannelBalance(channel *model.Channel) (float64, error) {
+	keys := channel.GetKeys()
+	if len(keys) == 0 {
+		return 0, errors.New("no keys available")
+	}
+
+	ctx := context.Background()
+	sem := semaphore.NewWeighted(maxParallelBalanceQueries)
+	var mu sync.Mutex
+	var totalBalance float64
+	var failedCount int
+	var wg sync.WaitGroup
+
+	for idx, key := range keys {
+		wg.Add(1)
+		if err := sem.Acquire(ctx, 1); err != nil {
+			wg.Done()
+			mu.Lock()
+			failedCount++
+			mu.Unlock()
+			common.SysLog(fmt.Sprintf("failed to acquire semaphore for multi-key balance query: channel_id=%d, key_index=%d, error=%v", channel.Id, idx, err))
+			continue
+		}
+		go func(keyIndex int, key string) {
+			defer wg.Done()
+			defer sem.Release(1)
+			if key == "" {
+				mu.Lock()
+				failedCount++
+				mu.Unlock()
+				return
+			}
+			balance, err := updateChannelBalanceForKey(channel, key)
+			if err != nil {
+				mu.Lock()
+				failedCount++
+				mu.Unlock()
+				common.SysLog(fmt.Sprintf("failed to update balance for multi-key channel: channel_id=%d, key_index=%d, error=%v", channel.Id, keyIndex, err))
+				return
+			}
+			mu.Lock()
+			totalBalance += balance
+			mu.Unlock()
+		}(idx, key)
+	}
+	wg.Wait()
+
+	if failedCount == len(keys) {
+		return 0, fmt.Errorf("all keys failed to update balance for channel %d", channel.Id)
+	}
+	channel.UpdateBalance(totalBalance)
+	return totalBalance, nil
+}
+
 func updateChannelBalance(channel *model.Channel) (float64, error) {
+	if channel.ChannelInfo.IsMultiKey {
+		return updateMultiKeyChannelBalance(channel)
+	}
+	balance, err := doUpdateChannelBalance(channel)
+	if err != nil {
+		return 0, err
+	}
+	channel.UpdateBalance(balance)
+	return balance, nil
+}
+
+func doUpdateChannelBalance(channel *model.Channel) (float64, error) {
 	baseURL := constant.ChannelBaseURLs[channel.Type]
 	if channel.GetBaseURL() == "" {
 		channel.BaseURL = &baseURL
@@ -417,7 +485,6 @@ func updateChannelBalance(channel *model.Channel) (float64, error) {
 		return 0, err
 	}
 	balance := subscription.HardLimitUSD - usage.TotalUsage/100
-	channel.UpdateBalance(balance)
 	return balance, nil
 }
 
@@ -430,13 +497,6 @@ func UpdateChannelBalance(c *gin.Context) {
 	channel, err := model.CacheGetChannel(id)
 	if err != nil {
 		common.ApiError(c, err)
-		return
-	}
-	if channel.ChannelInfo.IsMultiKey {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "多密钥渠道不支持余额查询",
-		})
 		return
 	}
 	balance, err := updateChannelBalance(channel)
@@ -459,9 +519,6 @@ func updateAllChannelsBalance() error {
 	for _, channel := range channels {
 		if channel.Status != common.ChannelStatusEnabled {
 			continue
-		}
-		if channel.ChannelInfo.IsMultiKey {
-			continue // skip multi-key channels
 		}
 		// TODO: support Azure
 		//if channel.Type != common.ChannelTypeOpenAI && channel.Type != common.ChannelTypeCustom {
