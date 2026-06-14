@@ -593,6 +593,10 @@ func (channel *Channel) Update() error {
 				}
 			}
 		}
+		// Clean up stale per-key balance records that exceed the new key count
+		if err := CleanupChannelKeyBalances(channel.Id, channel.ChannelInfo.MultiKeySize); err != nil {
+			common.SysLog(fmt.Sprintf("failed to cleanup channel key balances: channel_id=%d, error=%v", channel.Id, err))
+		}
 	}
 	var err error
 	err = DB.Model(channel).Updates(channel).Error
@@ -626,6 +630,9 @@ func (channel *Channel) UpdateBalance(balance float64) {
 
 func (channel *Channel) Delete() error {
 	var err error
+	if err = DeleteChannelKeyBalancesByChannelId(channel.Id); err != nil {
+		return err
+	}
 	err = DB.Delete(channel).Error
 	if err != nil {
 		return err

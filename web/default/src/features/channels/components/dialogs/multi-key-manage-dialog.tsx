@@ -54,6 +54,7 @@ import {
 import { MULTI_KEY_FILTER_OPTIONS } from '../../constants'
 import {
   channelsQueryKeys,
+  formatBalance,
   formatTimestamp,
   getMultiKeyStatusConfig,
   getMultiKeyConfirmMessage,
@@ -360,12 +361,16 @@ export function MultiKeyManageDialog({
                 {t('No keys found')}
               </div>
             ) : (
-              <div className='min-w-[800px]'>
+              <div className='min-w-[1100px]'>
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead className='w-20'>{t('Index')}</TableHead>
                       <TableHead className='w-32'>{t('Status')}</TableHead>
+                      <TableHead className='w-40'>{t('Balance')}</TableHead>
+                      <TableHead className='w-28'>
+                        {t('Status Code')}
+                      </TableHead>
                       <TableHead className='min-w-[200px]'>
                         {t('Disabled Reason')}
                       </TableHead>
@@ -384,7 +389,23 @@ export function MultiKeyManageDialog({
                           #{key.index + 1}
                         </TableCell>
                         <TableCell>{renderStatusBadge(key.status)}</TableCell>
-                        <TableCell className='max-w-xs truncate text-sm'>
+                        <TableCell
+                          className='text-sm'
+                          title={
+                            key.balance_updated_time
+                              ? `${t('Last updated:')} ${formatKeyTimestamp(key.balance_updated_time)}`
+                              : undefined
+                          }
+                        >
+                          {formatBalance(key.balance)}
+                        </TableCell>
+                        <TableCell className='font-mono text-sm'>
+                          {key.status_code ?? '-'}
+                        </TableCell>
+                        <TableCell
+                          className='max-w-xs truncate text-sm'
+                          title={key.error_message || key.reason || undefined}
+                        >
                           {key.reason || '-'}
                         </TableCell>
                         <TableCell className='text-muted-foreground text-sm'>

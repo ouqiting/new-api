@@ -1252,11 +1252,15 @@ type MultiKeyStatusResponse struct {
 }
 
 type KeyStatus struct {
-	Index        int    `json:"index"`
-	Status       int    `json:"status"` // 1: enabled, 2: disabled
-	DisabledTime int64  `json:"disabled_time,omitempty"`
-	Reason       string `json:"reason,omitempty"`
-	KeyPreview   string `json:"key_preview"` // first 10 chars of key for identification
+	Index              int     `json:"index"`
+	Status             int     `json:"status"` // 1: enabled, 2: disabled
+	DisabledTime       int64   `json:"disabled_time,omitempty"`
+	Reason             string  `json:"reason,omitempty"`
+	KeyPreview         string  `json:"key_preview"` // first 10 chars of key for identification
+	Balance            float64 `json:"balance,omitempty"`
+	StatusCode         int     `json:"status_code,omitempty"`
+	BalanceUpdatedTime int64   `json:"balance_updated_time,omitempty"`
+	ErrorMessage       string  `json:"error_message,omitempty"`
 }
 
 // ManageMultiKeys handles multi-key management operations
@@ -1303,6 +1307,13 @@ func ManageMultiKeys(c *gin.Context) {
 			pageSize = 50 // Default page size
 		}
 
+		// Load per-key balance records for this channel
+		balanceRecords, _ := model.GetChannelKeyBalances(channel.Id)
+		balanceMap := make(map[int]*model.ChannelKeyBalance, len(balanceRecords))
+		for _, record := range balanceRecords {
+			balanceMap[record.KeyIndex] = record
+		}
+
 		// Statistics for all keys (unchanged by filtering)
 		var enabledCount, manualDisabledCount, autoDisabledCount int
 
@@ -1344,13 +1355,20 @@ func ManageMultiKeys(c *gin.Context) {
 				keyPreview = key[:10] + "..."
 			}
 
-			allKeyStatusList = append(allKeyStatusList, KeyStatus{
+			keyStatus := KeyStatus{
 				Index:        i,
 				Status:       status,
 				DisabledTime: disabledTime,
 				Reason:       reason,
 				KeyPreview:   keyPreview,
-			})
+			}
+			if record, ok := balanceMap[i]; ok {
+				keyStatus.Balance = record.Balance
+				keyStatus.StatusCode = record.StatusCode
+				keyStatus.BalanceUpdatedTime = record.BalanceUpdatedTime
+				keyStatus.ErrorMessage = record.ErrorMessage
+			}
+			allKeyStatusList = append(allKeyStatusList, keyStatus)
 		}
 
 		// Apply status filter if specified
@@ -1633,6 +1651,10 @@ func ManageMultiKeys(c *gin.Context) {
 			return
 		}
 
+		if err := model.ShiftChannelKeyBalancesOnDelete(channel.Id, keyIndex); err != nil {
+			common.SysLog(fmt.Sprintf("failed to shift channel key balances on delete: channel_id=%d, key_index=%d, error=%v", channel.Id, keyIndex, err))
+		}
+
 		model.InitChannelCache()
 		c.JSON(http.StatusOK, gin.H{
 			"success": true,
@@ -1644,6 +1666,7 @@ func ManageMultiKeys(c *gin.Context) {
 		keys := channel.GetKeys()
 		var remainingKeys []string
 		var deletedCount int
+		var deletedIndexes []int
 		var newStatusList = make(map[int]int)
 		var newDisabledTime = make(map[int]int64)
 		var newDisabledReason = make(map[int]string)
@@ -1660,6 +1683,7 @@ func ManageMultiKeys(c *gin.Context) {
 			// 只删除自动禁用（status == 3）的密钥，保留启用（status == 1）和手动禁用（status == 2）的密钥
 			if status == 3 {
 				deletedCount++
+				deletedIndexes = append(deletedIndexes, i)
 			} else {
 				remainingKeys = append(remainingKeys, key)
 				// 保留非自动禁用密钥的状态信息，重新索引
@@ -1699,6 +1723,10 @@ func ManageMultiKeys(c *gin.Context) {
 		if err != nil {
 			common.ApiError(c, err)
 			return
+		}
+
+		if err := model.DeleteChannelKeyBalancesOnDeleteDisabled(channel.Id, deletedIndexes); err != nil {
+			common.SysLog(fmt.Sprintf("failed to cleanup channel key balances on delete disabled: channel_id=%d, indexes=%v, error=%v", channel.Id, deletedIndexes, err))
 		}
 
 		model.InitChannelCache()

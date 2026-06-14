@@ -182,6 +182,10 @@ export interface KeyStatus {
   disabled_time?: number
   reason?: string
   key_preview?: string
+  balance?: number
+  status_code?: number
+  balance_updated_time?: number
+  error_message?: string
 }
 
 export type MultiKeyConfirmAction = {

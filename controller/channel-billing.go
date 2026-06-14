@@ -161,7 +161,10 @@ func GetResponseBody(method, url string, channel *model.Channel, headers http.He
 		return nil, err
 	}
 	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("status code: %d", res.StatusCode)
+		return nil, &responseError{
+			StatusCode: res.StatusCode,
+			Err:        fmt.Errorf("status code: %d", res.StatusCode),
+		}
 	}
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
@@ -389,10 +392,49 @@ type channelBalanceUpdateResult struct {
 	IsMultiKey   bool
 }
 
+// responseError wraps an HTTP status code so balance-recording logic can capture it
+// without changing the public signatures of existing helpers.
+type responseError struct {
+	StatusCode int
+	Err        error
+}
+
+func (e *responseError) Error() string { return e.Err.Error() }
+func (e *responseError) Unwrap() error { return e.Err }
+
+func statusCodeFromError(err error) int {
+	if err == nil {
+		return http.StatusOK
+	}
+	var respErr *responseError
+	if errors.As(err, &respErr) {
+		return respErr.StatusCode
+	}
+	return 0
+}
+
 func updateChannelBalanceForKey(channel *model.Channel, key string) (float64, error) {
 	channelCopy := *channel
 	channelCopy.Key = key
 	return doUpdateChannelBalance(&channelCopy)
+}
+
+func saveChannelKeyBalanceRecord(channelId int, keyIndex int, balance float64, statusCode int, err error) {
+	errorMessage := ""
+	if err != nil {
+		errorMessage = err.Error()
+	}
+	if saveErr := model.SaveChannelKeyBalance(channelId, keyIndex, balance, statusCode, errorMessage); saveErr != nil {
+		common.SysLog(fmt.Sprintf("failed to save channel key balance record: channel_id=%d, key_index=%d, error=%v", channelId, keyIndex, saveErr))
+	}
+}
+
+func disableKeyOnBalanceQueryFailure(channel *model.Channel, key string, err error) {
+	if channel == nil || key == "" || err == nil {
+		return
+	}
+	reason := fmt.Sprintf("余额查询失败: %s", err.Error())
+	service.DisableChannel(*types.NewChannelError(channel.Id, channel.Type, channel.Name, true, key, channel.GetAutoBan()), reason)
 }
 
 func updateMultiKeyChannelBalance(channel *model.Channel) (channelBalanceUpdateResult, error) {
@@ -421,6 +463,7 @@ func updateMultiKeyChannelBalance(channel *model.Channel) (channelBalanceUpdateR
 			failedCount++
 			mu.Unlock()
 			common.SysLog(fmt.Sprintf("failed to acquire semaphore for multi-key balance query: channel_id=%d, key_index=%d, error=%v", channel.Id, idx, err))
+			go saveChannelKeyBalanceRecord(channel.Id, idx, 0, 0, err)
 			continue
 		}
 		go func(keyIndex int, key string) {
@@ -430,20 +473,25 @@ func updateMultiKeyChannelBalance(channel *model.Channel) (channelBalanceUpdateR
 				mu.Lock()
 				failedCount++
 				mu.Unlock()
+				saveChannelKeyBalanceRecord(channel.Id, keyIndex, 0, 0, errors.New("empty key"))
 				return
 			}
 			balance, err := updateChannelBalanceForKey(channel, key)
+			statusCode := statusCodeFromError(err)
 			if err != nil {
 				mu.Lock()
 				failedCount++
 				mu.Unlock()
 				common.SysLog(fmt.Sprintf("failed to update balance for multi-key channel: channel_id=%d, key_index=%d, error=%v", channel.Id, keyIndex, err))
+				saveChannelKeyBalanceRecord(channel.Id, keyIndex, 0, statusCode, err)
+				disableKeyOnBalanceQueryFailure(channel, key, err)
 				return
 			}
 			mu.Lock()
 			totalBalance += balance
 			successCount++
 			mu.Unlock()
+			saveChannelKeyBalanceRecord(channel.Id, keyIndex, balance, statusCode, nil)
 		}(idx, key)
 	}
 	wg.Wait()
