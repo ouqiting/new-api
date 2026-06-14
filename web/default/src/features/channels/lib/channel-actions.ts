@@ -292,21 +292,43 @@ export async function handleUpdateChannelBalance(
 ): Promise<void> {
   try {
     const response = await updateChannelBalance(id)
+    const hasMultiKeyStats =
+      response.success_count !== undefined &&
+      response.failed_count !== undefined
+    const multiKeyStatsMessage = hasMultiKeyStats
+      ? i18next.t('Query completed, {{success}} succeeded, {{failed}} failed', {
+          success: response.success_count,
+          failed: response.failed_count,
+        })
+      : ''
+
     if (response.success && response.balance !== undefined) {
       const balance = response.balance
-      toast.success(
-        i18next.t('Balance updated: {{balance}}', {
-          balance: formatCurrencyFromUSD(balance, {
-            digitsLarge: 2,
-            digitsSmall: 4,
-            abbreviate: false,
-          }),
-        })
-      )
+      if (hasMultiKeyStats) {
+        if (response.failed_count && response.failed_count > 0) {
+          toast.warning(multiKeyStatsMessage)
+        } else {
+          toast.success(multiKeyStatsMessage)
+        }
+      } else {
+        toast.success(
+          i18next.t('Balance updated: {{balance}}', {
+            balance: formatCurrencyFromUSD(balance, {
+              digitsLarge: 2,
+              digitsSmall: 4,
+              abbreviate: false,
+            }),
+          })
+        )
+      }
       queryClient?.invalidateQueries({ queryKey: channelsQueryKeys.lists() })
       onSuccess?.(balance)
     } else {
-      toast.error(response.message || i18next.t('Failed to update balance'))
+      toast.error(
+        hasMultiKeyStats
+          ? multiKeyStatsMessage
+          : response.message || i18next.t('Failed to update balance')
+      )
     }
   } catch (_error: unknown) {
     toast.error(
