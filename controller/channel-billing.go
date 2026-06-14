@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -122,6 +123,10 @@ type OpenRouterCreditResponse struct {
 		TotalCredits float64 `json:"total_credits"`
 		TotalUsage   float64 `json:"total_usage"`
 	} `json:"data"`
+}
+
+type VercelCreditsResponse struct {
+	Balance string `json:"balance"`
 }
 
 // GetAuthHeader get auth header
@@ -317,6 +322,30 @@ func updateChannelOpenRouterBalance(channel *model.Channel) (float64, error) {
 	return balance, nil
 }
 
+func updateChannelVercelBalance(channel *model.Channel) (float64, error) {
+	baseURL := channel.GetBaseURL()
+	if baseURL == "" {
+		baseURL = constant.ChannelBaseURLs[constant.ChannelTypeVercel]
+	}
+	baseURL = strings.TrimRight(baseURL, "/")
+	baseURL = strings.TrimSuffix(baseURL, "/v1")
+	url := fmt.Sprintf("%s/v1/credits", baseURL)
+	body, err := GetResponseBody("GET", url, channel, GetAuthHeader(channel.Key))
+	if err != nil {
+		return 0, err
+	}
+	response := VercelCreditsResponse{}
+	err = common.Unmarshal(body, &response)
+	if err != nil {
+		return 0, err
+	}
+	balance, err := strconv.ParseFloat(response.Balance, 64)
+	if err != nil {
+		return 0, err
+	}
+	return balance, nil
+}
+
 func updateChannelMoonshotBalance(channel *model.Channel) (float64, error) {
 	url := "https://api.moonshot.cn/v1/users/me/balance"
 	body, err := GetResponseBody("GET", url, channel, GetAuthHeader(channel.Key))
@@ -454,6 +483,8 @@ func doUpdateChannelBalance(channel *model.Channel) (float64, error) {
 		return updateChannelOpenRouterBalance(channel)
 	case constant.ChannelTypeMoonshot:
 		return updateChannelMoonshotBalance(channel)
+	case constant.ChannelTypeVercel:
+		return updateChannelVercelBalance(channel)
 	default:
 		return 0, errors.New("尚未实现")
 	}

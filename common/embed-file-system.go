@@ -2,6 +2,7 @@ package common
 
 import (
 	"embed"
+	"errors"
 	"io/fs"
 	"net/http"
 	"os"
@@ -13,6 +14,16 @@ import (
 
 type embedFileSystem struct {
 	http.FileSystem
+}
+
+type emptyFileSystem struct{}
+
+func (e emptyFileSystem) Exists(prefix string, path string) bool {
+	return false
+}
+
+func (e emptyFileSystem) Open(name string) (http.File, error) {
+	return nil, os.ErrNotExist
 }
 
 func (e *embedFileSystem) Exists(prefix string, path string) bool {
@@ -35,6 +46,9 @@ func (e *embedFileSystem) Open(name string) (http.File, error) {
 func EmbedFolder(fsEmbed embed.FS, targetPath string) static.ServeFileSystem {
 	efs, err := fs.Sub(fsEmbed, targetPath)
 	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return emptyFileSystem{}
+		}
 		panic(err)
 	}
 	return &embedFileSystem{

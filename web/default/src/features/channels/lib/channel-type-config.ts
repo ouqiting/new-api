@@ -134,6 +134,17 @@ export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
       baseUrl: 'Default: https://api.replicate.com',
     },
   },
+  58: {
+    id: 58,
+    name: CHANNEL_TYPES[58],
+    icon: 'vercel',
+    defaultBaseUrl: 'https://ai-gateway.vercel.sh',
+    hints: {
+      baseUrl: 'Default: https://ai-gateway.vercel.sh',
+      key: 'Vercel AI Gateway API Key',
+      models: 'Use model IDs from Vercel AI Gateway',
+    },
+  },
 }
 
 /**

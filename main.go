@@ -35,11 +35,18 @@ import (
 	_ "net/http/pprof"
 )
 
-//go:embed web/default/dist
+//go:embed web/default
 var buildFS embed.FS
 
-//go:embed web/default/dist/index.html
-var indexPage []byte
+var indexPage = loadIndexPage()
+
+func loadIndexPage() []byte {
+	page, err := buildFS.ReadFile("web/default/dist/index.html")
+	if err == nil {
+		return page
+	}
+	return []byte("<!doctype html><html><head><title>Frontend assets not built</title></head><body>Frontend assets are not built. Run the frontend build before packaging a release.</body></html>")
+}
 
 func main() {
 	startTime := time.Now()

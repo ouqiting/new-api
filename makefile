@@ -7,15 +7,29 @@ DEV_BACKEND_SERVICE = new-api
 DEV_POSTGRES_DB = new-api
 DEV_POSTGRES_USER = root
 DEV_SQLITE_PATH ?= one-api.db
+BUILD_OUTPUT ?= new-api
 
-.PHONY: all build-frontend start-backend dev dev-api dev-api-rebuild dev-web reset-setup
+.PHONY: all ensure-frontend-assets build build-frontend release start-backend dev dev-api dev-api-rebuild dev-web reset-setup
 
 all: build-frontend start-backend
+
+ensure-frontend-assets:
+	@if [ ! -f "$(FRONTEND_DIR)/dist/index.html" ]; then \
+		echo "Frontend dist not found; creating placeholder assets for Go embed."; \
+		mkdir -p "$(FRONTEND_DIR)/dist"; \
+		printf '%s\n' '<!doctype html><html><head><title>Frontend assets not built</title></head><body>Frontend assets are not built. Run make build-frontend before packaging a release.</body></html>' > "$(FRONTEND_DIR)/dist/index.html"; \
+	fi
+
+build: ensure-frontend-assets
+	@echo "Building backend..."
+	@go build -ldflags "-s -w -X 'github.com/QuantumNous/new-api/common.Version=$$(cat VERSION)'" -o $(BUILD_OUTPUT)
 
 build-frontend:
 	@echo "Building default frontend..."
 	@cd ./web && bun install --frozen-lockfile
 	@cd $(FRONTEND_DIR) && DISABLE_ESLINT_PLUGIN='true' VITE_REACT_APP_VERSION=$(cat ../../VERSION) bun run build
+
+release: build-frontend build
 
 start-backend:
 	@echo "Starting backend dev server..."
