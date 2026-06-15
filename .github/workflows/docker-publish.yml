@@ -110,7 +110,7 @@ jobs:
           payload = {
               "embeds": [
                   {
-                      "title": "Docker 构建通知",
+                      "title": f"Docker 构建{result_text}",
                       "color": color,
                       "fields": [
                           {
