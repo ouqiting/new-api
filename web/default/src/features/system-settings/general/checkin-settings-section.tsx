@@ -30,8 +30,14 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
-import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+  InputGroupText,
+} from '@/components/ui/input-group'
+import { formatQuotaWithCurrency } from '@/lib/currency'
 import {
   SettingsForm,
   SettingsSwitchContent,
@@ -152,12 +158,22 @@ export function CheckinSettingsSection({
                   <FormItem>
                     <FormLabel>{t('Minimum check-in quota')}</FormLabel>
                     <FormControl>
-                      <Input
-                        type='number'
-                        min={0}
-                        placeholder={t('1000')}
-                        {...field}
-                      />
+                      <InputGroup>
+                        <InputGroupInput
+                          type='number'
+                          min={0}
+                          placeholder={t('1000')}
+                          {...field}
+                        />
+                        <InputGroupAddon align='inline-end'>
+                          <InputGroupText>
+                            ={' '}
+                            {formatQuotaWithCurrency(Number(field.value) || 0, {
+                              abbreviate: false,
+                            })}
+                          </InputGroupText>
+                        </InputGroupAddon>
+                      </InputGroup>
                     </FormControl>
                     <FormDescription>
                       {t('Minimum quota amount awarded for check-in')}
@@ -174,12 +190,22 @@ export function CheckinSettingsSection({
                   <FormItem>
                     <FormLabel>{t('Maximum check-in quota')}</FormLabel>
                     <FormControl>
-                      <Input
-                        type='number'
-                        min={0}
-                        placeholder={t('10000')}
-                        {...field}
-                      />
+                      <InputGroup>
+                        <InputGroupInput
+                          type='number'
+                          min={0}
+                          placeholder={t('10000')}
+                          {...field}
+                        />
+                        <InputGroupAddon align='inline-end'>
+                          <InputGroupText>
+                            ={' '}
+                            {formatQuotaWithCurrency(Number(field.value) || 0, {
+                              abbreviate: false,
+                            })}
+                          </InputGroupText>
+                        </InputGroupAddon>
+                      </InputGroup>
                     </FormControl>
                     <FormDescription>
                       {t('Maximum quota amount awarded for check-in')}
