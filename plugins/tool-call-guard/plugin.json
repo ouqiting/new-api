@@ -1,0 +1,11 @@
+{
+  "id": "tool-call-guard",
+  "title": "Tool Call Guard",
+  "description": "Deny API requests that contain tool declarations for non-admin users.",
+  "version": "1.0.0",
+  "author": "new-api",
+  "entry": "main.js",
+  "hooks": ["pre-request"],
+  "capabilities": ["read-request", "deny-request"],
+  "config": {}
+}

@@ -4555,6 +4555,17 @@
     "Use random quota rewards between minimum and maximum": "Use random quota rewards between minimum and maximum",
     "Check-in quota reward": "Check-in quota reward",
     "Fixed quota amount awarded for each check-in": "Fixed quota amount awarded for each check-in",
-    "Daily check-in can earn {{amount}} quota reward": "Daily check-in can earn {{amount}} quota reward"
+    "Plugin": "Plugin",
+    "Plugins": "Plugins",
+    "Plugin description": "Plugin description",
+    "Plugin enabled successfully": "Plugin enabled successfully",
+    "Plugin disabled successfully": "Plugin disabled successfully",
+    "Plugins reloaded successfully": "Plugins reloaded successfully",
+    "Failed to reload plugins": "Failed to reload plugins",
+    "Reload": "Reload",
+    "Failed to update plugin": "Failed to update plugin",
+    "No plugins found": "No plugins found",
+    "Disabled": "Disabled",
+    "Enabled": "Enabled"
   }
 }

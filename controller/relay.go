@@ -21,6 +21,7 @@ import (
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/service/plugin"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/types"
@@ -63,6 +64,45 @@ func geminiRelayHandler(c *gin.Context, info *relaycommon.RelayInfo) *types.NewA
 		err = relay.GeminiHelper(c, info)
 	}
 	return err
+}
+
+func buildPluginContext(c *gin.Context, info *relaycommon.RelayInfo) plugin.Context {
+	role := c.GetInt("role")
+	roleStr := "user"
+	switch role {
+	case common.RoleRootUser:
+		roleStr = "root"
+	case common.RoleAdminUser:
+		roleStr = "admin"
+	case common.RoleCommonUser:
+		roleStr = "user"
+	}
+
+	return plugin.Context{
+		UserID:    info.UserId,
+		Role:      roleStr,
+		Group:     info.UserGroup,
+		TokenName: info.TokenKey,
+		Model:     info.OriginModelName,
+	}
+}
+
+func runPluginPreRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.Request) (*plugin.Result, error) {
+	if request == nil {
+		return nil, nil
+	}
+
+	payload, err := common.Marshal(request)
+	if err != nil {
+		return nil, err
+	}
+
+	ctx := buildPluginContext(c, info)
+	result, _, err := plugin.RunPreRequest(ctx, payload)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 func Relay(c *gin.Context, relayFormat types.RelayFormat) {
@@ -120,6 +160,25 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	relayInfo, err := relaycommon.GenRelayInfo(c, relayFormat, request, ws)
 	if err != nil {
 		newAPIError = types.NewError(err, types.ErrorCodeGenRelayInfoFailed)
+		return
+	}
+
+	pluginResult, err := runPluginPreRequest(c, relayInfo, request)
+	if err != nil {
+		newAPIError = types.NewError(err, types.ErrorCodePluginHookError)
+		return
+	}
+	if pluginResult != nil && pluginResult.Action == plugin.ActionDeny {
+		status := pluginResult.Code
+		if status == 0 {
+			status = http.StatusForbidden
+		}
+		newAPIError = types.NewErrorWithStatusCode(
+			errors.New(pluginResult.Error),
+			types.ErrorCodePluginRequestDenied,
+			status,
+			types.ErrOptionWithSkipRetry(),
+		)
 		return
 	}
 

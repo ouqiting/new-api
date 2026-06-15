@@ -4555,6 +4555,17 @@
     "Use random quota rewards between minimum and maximum": "在最小额度和最大额度之间随机奖励",
     "Check-in quota reward": "签到获取额度",
     "Fixed quota amount awarded for each check-in": "每次签到获得的固定额度",
-    "Daily check-in can earn {{amount}} quota reward": "每日签到可获得 {{amount}}额度奖励"
+    "Plugin": "插件",
+    "Plugins": "插件",
+    "Plugin description": "插件描述",
+    "Plugin enabled successfully": "插件已启用",
+    "Plugin disabled successfully": "插件已停用",
+    "Plugins reloaded successfully": "插件已重新加载",
+    "Failed to reload plugins": "插件重新加载失败",
+    "Reload": "重新加载",
+    "Failed to update plugin": "插件更新失败",
+    "No plugins found": "未找到插件",
+    "Disabled": "已停用",
+    "Enabled": "已启用"
   }
 }

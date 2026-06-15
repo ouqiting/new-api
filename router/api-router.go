@@ -225,6 +225,13 @@ func SetApiRouter(router *gin.Engine) {
 			ratioSyncRoute.GET("/channels", controller.GetSyncableChannels)
 			ratioSyncRoute.POST("/fetch", controller.FetchUpstreamRatios)
 		}
+		pluginRoute := apiRouter.Group("/plugin")
+		pluginRoute.Use(middleware.RootAuth())
+		{
+			pluginRoute.GET("/", controller.GetPlugins)
+			pluginRoute.PUT("/", controller.TogglePlugin)
+			pluginRoute.POST("/reload", controller.ReloadPlugins)
+		}
 		channelRoute := apiRouter.Group("/channel")
 		channelRoute.Use(middleware.AdminAuth())
 		{
