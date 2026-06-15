@@ -49,6 +49,8 @@ import { useUpdateOption } from '../hooks/use-update-option'
 
 const schema = z.object({
   enabled: z.boolean(),
+  randomQuota: z.boolean(),
+  fixedQuota: z.coerce.number().int().min(0),
   minQuota: z.coerce.number().int().min(0),
   maxQuota: z.coerce.number().int().min(0),
 })
@@ -60,6 +62,8 @@ export function CheckinSettingsSection({
 }: {
   defaultValues: {
     enabled: boolean
+    randomQuota: boolean
+    fixedQuota: number
     minQuota: number
     maxQuota: number
   }
@@ -71,6 +75,8 @@ export function CheckinSettingsSection({
     resolver: zodResolver(schema) as unknown as Resolver<Values>,
     defaultValues: {
       enabled: defaultValues.enabled,
+      randomQuota: defaultValues.randomQuota,
+      fixedQuota: defaultValues.fixedQuota,
       minQuota: defaultValues.minQuota,
       maxQuota: defaultValues.maxQuota,
     },
@@ -78,6 +84,7 @@ export function CheckinSettingsSection({
 
   const { isDirty, isSubmitting } = form.formState
   const enabled = form.watch('enabled')
+  const randomQuota = form.watch('randomQuota')
 
   async function onSubmit(values: Values) {
     const updates: Array<{ key: string; value: string }> = []
@@ -86,6 +93,20 @@ export function CheckinSettingsSection({
       updates.push({
         key: 'checkin_setting.enabled',
         value: String(values.enabled),
+      })
+    }
+
+    if (values.randomQuota !== defaultValues.randomQuota) {
+      updates.push({
+        key: 'checkin_setting.random_quota',
+        value: String(values.randomQuota),
+      })
+    }
+
+    if (values.fixedQuota !== defaultValues.fixedQuota) {
+      updates.push({
+        key: 'checkin_setting.fixed_quota',
+        value: String(values.fixedQuota),
       })
     }
 
@@ -150,71 +171,144 @@ export function CheckinSettingsSection({
           />
 
           {enabled && (
-            <div className='grid gap-6 sm:grid-cols-2'>
-              <FormField
-                control={form.control}
-                name='minQuota'
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t('Minimum check-in quota')}</FormLabel>
-                    <FormControl>
-                      <InputGroup>
-                        <InputGroupInput
-                          type='number'
-                          min={0}
-                          placeholder={t('1000')}
-                          {...field}
+            <>
+              <div className='grid gap-6 sm:grid-cols-2'>
+                <FormField
+                  control={form.control}
+                  name='randomQuota'
+                  render={({ field }) => (
+                    <SettingsSwitchItem>
+                      <SettingsSwitchContent>
+                        <FormLabel>{t('Random check-in quota')}</FormLabel>
+                        <FormDescription>
+                          {t(
+                            'Use random quota rewards between minimum and maximum'
+                          )}
+                        </FormDescription>
+                      </SettingsSwitchContent>
+                      <FormControl>
+                        <Switch
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                          disabled={updateOption.isPending || isSubmitting}
                         />
-                        <InputGroupAddon align='inline-end'>
-                          <InputGroupText>
-                            ={' '}
-                            {formatQuotaWithCurrency(Number(field.value) || 0, {
-                              abbreviate: false,
-                            })}
-                          </InputGroupText>
-                        </InputGroupAddon>
-                      </InputGroup>
-                    </FormControl>
-                    <FormDescription>
-                      {t('Minimum quota amount awarded for check-in')}
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                      </FormControl>
+                    </SettingsSwitchItem>
+                  )}
+                />
+              </div>
 
-              <FormField
-                control={form.control}
-                name='maxQuota'
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t('Maximum check-in quota')}</FormLabel>
-                    <FormControl>
-                      <InputGroup>
-                        <InputGroupInput
-                          type='number'
-                          min={0}
-                          placeholder={t('10000')}
-                          {...field}
-                        />
-                        <InputGroupAddon align='inline-end'>
-                          <InputGroupText>
-                            ={' '}
-                            {formatQuotaWithCurrency(Number(field.value) || 0, {
-                              abbreviate: false,
-                            })}
-                          </InputGroupText>
-                        </InputGroupAddon>
-                      </InputGroup>
-                    </FormControl>
-                    <FormDescription>
-                      {t('Maximum quota amount awarded for check-in')}
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
+              {randomQuota ? (
+                <div className='grid gap-6 sm:grid-cols-2'>
+                  <FormField
+                    control={form.control}
+                    name='minQuota'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t('Minimum check-in quota')}</FormLabel>
+                        <FormControl>
+                          <InputGroup>
+                            <InputGroupInput
+                              type='number'
+                              min={0}
+                              placeholder={t('1000')}
+                              {...field}
+                            />
+                            <InputGroupAddon align='inline-end'>
+                              <InputGroupText>
+                                ={' '}
+                                {formatQuotaWithCurrency(
+                                  Number(field.value) || 0,
+                                  {
+                                    abbreviate: false,
+                                  }
+                                )}
+                              </InputGroupText>
+                            </InputGroupAddon>
+                          </InputGroup>
+                        </FormControl>
+                        <FormDescription>
+                          {t('Minimum quota amount awarded for check-in')}
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name='maxQuota'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t('Maximum check-in quota')}</FormLabel>
+                        <FormControl>
+                          <InputGroup>
+                            <InputGroupInput
+                              type='number'
+                              min={0}
+                              placeholder={t('10000')}
+                              {...field}
+                            />
+                            <InputGroupAddon align='inline-end'>
+                              <InputGroupText>
+                                ={' '}
+                                {formatQuotaWithCurrency(
+                                  Number(field.value) || 0,
+                                  {
+                                    abbreviate: false,
+                                  }
+                                )}
+                              </InputGroupText>
+                            </InputGroupAddon>
+                          </InputGroup>
+                        </FormControl>
+                        <FormDescription>
+                          {t('Maximum quota amount awarded for check-in')}
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              ) : (
+                <div className='grid gap-6 sm:grid-cols-2'>
+                  <FormField
+                    control={form.control}
+                    name='fixedQuota'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t('Check-in quota reward')}</FormLabel>
+                        <FormControl>
+                          <InputGroup>
+                            <InputGroupInput
+                              type='number'
+                              min={0}
+                              placeholder={t('5000')}
+                              {...field}
+                            />
+                            <InputGroupAddon align='inline-end'>
+                              <InputGroupText>
+                                ={' '}
+                                {formatQuotaWithCurrency(
+                                  Number(field.value) || 0,
+                                  {
+                                    abbreviate: false,
+                                  }
+                                )}
+                              </InputGroupText>
+                            </InputGroupAddon>
+                          </InputGroup>
+                        </FormControl>
+                        <FormDescription>
+                          {t('Fixed quota amount awarded for each check-in')}
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              )}
+            </>
           )}
         </SettingsForm>
       </Form>

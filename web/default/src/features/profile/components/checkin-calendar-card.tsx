@@ -109,6 +109,15 @@ export function CheckinCalendarCard({
     )
   }, [checkinData?.stats?.records])
 
+  const rewardText = useMemo(() => {
+    if (checkinData?.random_quota) {
+      return t('Check in daily to receive random quota rewards')
+    }
+    return t('Daily check-in can earn {{amount}} quota reward', {
+      amount: formatQuotaWithCurrency(checkinData?.fixed_quota || 0),
+    })
+  }, [checkinData?.random_quota, checkinData?.fixed_quota, t])
+
   const todayString = useMemo(() => {
     const d = new Date()
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -308,7 +317,7 @@ export function CheckinCalendarCard({
                 <p className='text-muted-foreground mt-1 line-clamp-2 text-xs sm:text-sm'>
                   {checkedToday && todayAward !== undefined
                     ? `${t('Today')} +${formatQuotaWithCurrency(todayAward)}`
-                    : t('Check in daily to receive random quota rewards')}
+                    : rewardText}
                 </p>
               </div>
             </Button>

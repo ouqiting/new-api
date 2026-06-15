@@ -4550,6 +4550,11 @@
     "Zero retention": "零数据保留",
     "Zhipu": "智谱",
     "Zhipu V4": "智谱 V4",
-    "Zoom": "缩放"
+    "Zoom": "缩放",
+    "Random check-in quota": "随机签到额度",
+    "Use random quota rewards between minimum and maximum": "在最小额度和最大额度之间随机奖励",
+    "Check-in quota reward": "签到获取额度",
+    "Fixed quota amount awarded for each check-in": "每次签到获得的固定额度",
+    "Daily check-in can earn {{amount}} quota reward": "每日签到可获得 {{amount}}额度奖励"
   }
 }

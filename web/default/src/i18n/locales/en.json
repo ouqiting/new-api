@@ -4550,6 +4550,11 @@
     "Zero retention": "Zero retention",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom"
+    "Zoom": "Zoom",
+    "Random check-in quota": "Random check-in quota",
+    "Use random quota rewards between minimum and maximum": "Use random quota rewards between minimum and maximum",
+    "Check-in quota reward": "Check-in quota reward",
+    "Fixed quota amount awarded for each check-in": "Fixed quota amount awarded for each check-in",
+    "Daily check-in can earn {{amount}} quota reward": "Daily check-in can earn {{amount}} quota reward"
   }
 }
