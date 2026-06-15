@@ -48,3 +48,116 @@ func TestGetNextEnabledKeyFillFirstLocksAndSwitchesAfterError(t *testing.T) {
 	require.Equal(t, switchedKey, lockedKey)
 	require.Equal(t, switchedIndex, lockedIndex)
 }
+
+func TestSwitchMultiKeyFillFirstKeyExhaustsRequestKeys(t *testing.T) {
+	originalMemoryCacheEnabled := common.MemoryCacheEnabled
+	common.MemoryCacheEnabled = true
+	t.Cleanup(func() {
+		common.MemoryCacheEnabled = originalMemoryCacheEnabled
+	})
+
+	channel := &Channel{
+		Id:  987655,
+		Key: "key-a\nkey-b",
+		ChannelInfo: ChannelInfo{
+			IsMultiKey:             true,
+			MultiKeyMode:           constant.MultiKeyModeFillFirst,
+			MultiKeyFillFirstIndex: common.GetPointer(0),
+		},
+	}
+	originalChannelsIDM := channelsIDM
+	t.Cleanup(func() {
+		channelsIDM = originalChannelsIDM
+	})
+	channelsIDM = map[int]*Channel{channel.Id: channel}
+
+	tried := make(map[int]bool)
+	key, index, switched, exhausted := SwitchMultiKeyFillFirstKey(channel.Id, "key-a", 0, tried)
+	require.True(t, switched)
+	require.False(t, exhausted)
+	require.Equal(t, "key-b", key)
+	require.Equal(t, 1, index)
+	require.True(t, tried[0])
+
+	key, index, switched, exhausted = SwitchMultiKeyFillFirstKey(channel.Id, "key-b", 1, tried)
+	require.False(t, switched)
+	require.True(t, exhausted)
+	require.Empty(t, key)
+	require.Zero(t, index)
+	require.True(t, tried[0])
+	require.True(t, tried[1])
+}
+
+func TestSwitchMultiKeyRandomExhaustsRequestKeys(t *testing.T) {
+	originalMemoryCacheEnabled := common.MemoryCacheEnabled
+	common.MemoryCacheEnabled = true
+	t.Cleanup(func() {
+		common.MemoryCacheEnabled = originalMemoryCacheEnabled
+	})
+
+	channel := &Channel{
+		Id:  987656,
+		Key: "key-a\nkey-b",
+		ChannelInfo: ChannelInfo{
+			IsMultiKey:   true,
+			MultiKeyMode: constant.MultiKeyModeRandom,
+		},
+	}
+	originalChannelsIDM := channelsIDM
+	t.Cleanup(func() {
+		channelsIDM = originalChannelsIDM
+	})
+	channelsIDM = map[int]*Channel{channel.Id: channel}
+
+	tried := make(map[int]bool)
+	key, index, switched, exhausted := SwitchMultiKeyKey(channel.Id, "key-a", 0, tried)
+	require.True(t, switched)
+	require.False(t, exhausted)
+	require.Equal(t, "key-b", key)
+	require.Equal(t, 1, index)
+
+	_, _, switched, exhausted = SwitchMultiKeyKey(channel.Id, "key-b", 1, tried)
+	require.False(t, switched)
+	require.True(t, exhausted)
+}
+
+func TestSwitchMultiKeyPollingUsesNextRequestKey(t *testing.T) {
+	originalMemoryCacheEnabled := common.MemoryCacheEnabled
+	common.MemoryCacheEnabled = true
+	t.Cleanup(func() {
+		common.MemoryCacheEnabled = originalMemoryCacheEnabled
+	})
+
+	channel := &Channel{
+		Id:  987657,
+		Key: "key-a\nkey-b\nkey-c",
+		ChannelInfo: ChannelInfo{
+			IsMultiKey:   true,
+			MultiKeyMode: constant.MultiKeyModePolling,
+		},
+	}
+	originalChannelsIDM := channelsIDM
+	t.Cleanup(func() {
+		channelsIDM = originalChannelsIDM
+	})
+	channelsIDM = map[int]*Channel{channel.Id: channel}
+
+	tried := make(map[int]bool)
+	key, index, switched, exhausted := SwitchMultiKeyKey(channel.Id, "key-a", 0, tried)
+	require.True(t, switched)
+	require.False(t, exhausted)
+	require.Equal(t, "key-b", key)
+	require.Equal(t, 1, index)
+	require.Equal(t, 2, channel.ChannelInfo.MultiKeyPollingIndex)
+
+	key, index, switched, exhausted = SwitchMultiKeyKey(channel.Id, "key-b", 1, tried)
+	require.True(t, switched)
+	require.False(t, exhausted)
+	require.Equal(t, "key-c", key)
+	require.Equal(t, 2, index)
+	require.Equal(t, 0, channel.ChannelInfo.MultiKeyPollingIndex)
+
+	_, _, switched, exhausted = SwitchMultiKeyKey(channel.Id, "key-c", 2, tried)
+	require.False(t, switched)
+	require.True(t, exhausted)
+}

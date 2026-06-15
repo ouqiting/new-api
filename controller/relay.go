@@ -228,7 +228,17 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		newAPIError = service.NormalizeViolationFeeError(newAPIError)
 		relayInfo.LastError = newAPIError
 
-		processChannelError(c, *types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, common.GetContextKeyString(c, constant.ContextKeyChannelKey), channel.GetAutoBan()), newAPIError)
+		channelError := *types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, common.GetContextKeyString(c, constant.ContextKeyChannelKey), channel.GetAutoBan())
+		switchedMultiKey, exhaustedMultiKeys := switchMultiKeyForRetry(c, relayInfo, channel.Id)
+		if switchedMultiKey {
+			processChannelError(c, channelError, newAPIError, false)
+			retryParam.ResetRetryNextTry()
+			continue
+		}
+		processChannelError(c, channelError, newAPIError)
+		if exhaustedMultiKeys {
+			break
+		}
 
 		if !shouldRetry(c, newAPIError, common.RetryTimes-retryParam.GetRetry()) {
 			break
@@ -353,7 +363,60 @@ func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) b
 	return operation_setting.ShouldRetryByStatusCode(code)
 }
 
-func processChannelError(c *gin.Context, channelError types.ChannelError, err *types.NewAPIError) {
+const contextKeyTriedMultiKeys = "tried_multi_keys"
+
+func getTriedMultiKeys(c *gin.Context, channelId int) map[int]bool {
+	value, exists := c.Get(contextKeyTriedMultiKeys)
+	if !exists {
+		triedByChannel := map[int]map[int]bool{
+			channelId: {},
+		}
+		c.Set(contextKeyTriedMultiKeys, triedByChannel)
+		return triedByChannel[channelId]
+	}
+
+	triedByChannel, ok := value.(map[int]map[int]bool)
+	if !ok {
+		triedByChannel = make(map[int]map[int]bool)
+		c.Set(contextKeyTriedMultiKeys, triedByChannel)
+	}
+	if triedByChannel[channelId] == nil {
+		triedByChannel[channelId] = make(map[int]bool)
+	}
+	return triedByChannel[channelId]
+}
+
+func switchMultiKeyForRetry(c *gin.Context, relayInfo *relaycommon.RelayInfo, channelId int) (bool, bool) {
+	if channelId == 0 {
+		channelId = common.GetContextKeyInt(c, constant.ContextKeyChannelId)
+	}
+	if channelId == 0 || !common.GetContextKeyBool(c, constant.ContextKeyChannelIsMultiKey) {
+		return false, false
+	}
+
+	usingKey := common.GetContextKeyString(c, constant.ContextKeyChannelKey)
+	usingIndex := common.GetContextKeyInt(c, constant.ContextKeyChannelMultiKeyIndex)
+	tried := getTriedMultiKeys(c, channelId)
+	key, index, switched, exhausted := model.SwitchMultiKeyKey(channelId, usingKey, usingIndex, tried)
+	if !switched {
+		if exhausted {
+			logger.LogDebug(c, "multi-key exhausted for channel #%d", channelId)
+		}
+		return false, exhausted
+	}
+
+	common.SetContextKey(c, constant.ContextKeyChannelKey, key)
+	common.SetContextKey(c, constant.ContextKeyChannelMultiKeyIndex, index)
+	if relayInfo != nil && relayInfo.ChannelMeta != nil {
+		relayInfo.ChannelMeta.ApiKey = key
+		relayInfo.ChannelMeta.ChannelMultiKeyIndex = index
+		relayInfo.ChannelMeta.ChannelIsMultiKey = true
+	}
+	logger.LogDebug(c, "multi-key switched channel #%d to key index %d", channelId, index)
+	return true, false
+}
+
+func processChannelError(c *gin.Context, channelError types.ChannelError, err *types.NewAPIError, recordErrorLog ...bool) {
 	logger.LogError(c, fmt.Sprintf("channel error (channel #%d, status code: %d): %s", channelError.ChannelId, err.StatusCode, common.LocalLogPreview(err.Error())))
 	// 不要使用context获取渠道信息，异步处理时可能会出现渠道信息不一致的情况
 	// do not use context to get channel info, there may be inconsistent channel info when processing asynchronously
@@ -371,7 +434,8 @@ func processChannelError(c *gin.Context, channelError types.ChannelError, err *t
 		})
 	}
 
-	if constant.ErrorLogEnabled && types.IsRecordErrorLog(err) {
+	shouldRecordErrorLog := len(recordErrorLog) == 0 || recordErrorLog[0]
+	if shouldRecordErrorLog && constant.ErrorLogEnabled && types.IsRecordErrorLog(err) {
 		// 保存错误日志到mysql中
 		userId := c.GetInt("id")
 		tokenName := c.GetString("token_name")
