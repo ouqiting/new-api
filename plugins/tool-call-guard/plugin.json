@@ -1,7 +1,7 @@
 {
   "id": "tool-call-guard",
   "title": "Tool Call Guard",
-  "description": "Deny API requests that contain tool declarations for non-admin users.",
+  "description": "禁止普通用户提交包含工具调用格式的 API 请求。",
   "version": "1.0.0",
   "author": "new-api",
   "entry": "main.js",

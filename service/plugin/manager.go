@@ -61,10 +61,8 @@ func Reload() error {
 
 // Init discovers the plugin directory, loads manifests, and starts enabled plugins.
 func (m *Manager) Init() error {
-	m.pluginDir = os.Getenv(pluginDirEnv)
-	if m.pluginDir == "" {
-		m.pluginDir = defaultPluginDir
-	}
+	m.pluginDir = resolvePluginDir(os.Getenv(pluginDirEnv))
+	common.SysLog("plugin directory: " + m.pluginDir)
 
 	if err := m.scan(); err != nil {
 		common.SysLog("failed to scan plugins: " + err.Error())
@@ -72,6 +70,44 @@ func (m *Manager) Init() error {
 
 	m.startEnabled()
 	return nil
+}
+
+func resolvePluginDir(configuredDir string) string {
+	if configuredDir != "" {
+		return configuredDir
+	}
+
+	if dir, ok := findPluginDirFrom("."); ok {
+		return dir
+	}
+
+	if executablePath, err := os.Executable(); err == nil {
+		if dir, ok := findPluginDirFrom(filepath.Dir(executablePath)); ok {
+			return dir
+		}
+	}
+
+	return defaultPluginDir
+}
+
+func findPluginDirFrom(start string) (string, bool) {
+	dir, err := filepath.Abs(start)
+	if err != nil {
+		return "", false
+	}
+
+	for {
+		candidate := filepath.Join(dir, defaultPluginDir)
+		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
+			return candidate, true
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", false
+		}
+		dir = parent
+	}
 }
 
 func (m *Manager) scan() error {
