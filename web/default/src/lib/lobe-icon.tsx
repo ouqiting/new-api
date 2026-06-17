@@ -105,7 +105,11 @@ const LobeIconAsync = memo(function LobeIconAsync({
         }
         const Comp = module?.default
         if (!cancelled) {
-          if (Comp && typeof Comp === 'function') {
+          // @lobehub/icons wraps components with React.memo, which returns a
+          // special memo object rather than a plain function. Just check that
+          // the default export exists; the bundler guarantees it is a valid
+          // React component type.
+          if (Comp) {
             setIcon(() => Comp)
           } else {
             setError(true)
