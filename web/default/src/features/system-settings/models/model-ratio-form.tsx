@@ -309,7 +309,11 @@ export const ModelRatioForm = memo(function ModelRatioForm({
                   <FormControl>
                     <Switch
                       checked={field.value}
-                      onCheckedChange={field.onChange}
+                      onCheckedChange={(checked) => {
+                        field.onChange(checked)
+                        void form.handleSubmit(onSave)()
+                      }}
+                      disabled={isSaving}
                     />
                   </FormControl>
                 </SettingsSwitchItem>
