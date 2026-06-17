@@ -106,6 +106,7 @@ const createModelSchema = (t: Translate) =>
     AudioRatio: createJsonStringField(t),
     AudioCompletionRatio: createJsonStringField(t),
     ExposeRatioEnabled: z.boolean(),
+    UnpricedModelEnabled: z.boolean(),
     BillingMode: createJsonStringField(t),
     BillingExpr: createJsonStringField(t),
   })
@@ -178,6 +179,7 @@ export function RatioSettingsCard({
       modelDefaults.AudioCompletionRatio
     ),
     ExposeRatioEnabled: modelDefaults.ExposeRatioEnabled,
+    UnpricedModelEnabled: modelDefaults.UnpricedModelEnabled,
     BillingMode: normalizeJsonString(modelDefaults.BillingMode),
     BillingExpr: normalizeJsonString(modelDefaults.BillingExpr),
   })
@@ -248,6 +250,7 @@ export function RatioSettingsCard({
         modelDefaults.AudioCompletionRatio
       ),
       ExposeRatioEnabled: modelDefaults.ExposeRatioEnabled,
+      UnpricedModelEnabled: modelDefaults.UnpricedModelEnabled,
       BillingMode: normalizeJsonString(modelDefaults.BillingMode),
       BillingExpr: normalizeJsonString(modelDefaults.BillingExpr),
     }
@@ -308,6 +311,7 @@ export function RatioSettingsCard({
         AudioRatio: normalizeJsonString(values.AudioRatio),
         AudioCompletionRatio: normalizeJsonString(values.AudioCompletionRatio),
         ExposeRatioEnabled: values.ExposeRatioEnabled,
+        UnpricedModelEnabled: values.UnpricedModelEnabled,
         BillingMode: normalizeJsonString(values.BillingMode),
         BillingExpr: normalizeJsonString(values.BillingExpr),
       }

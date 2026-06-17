@@ -27,6 +27,7 @@ import {
   getModeVariant,
   getPriceDetail,
   getPriceSummary,
+  UNPRICED_MODEL_KEY,
   type ModelRow,
 } from './model-pricing-snapshots'
 
@@ -78,21 +79,28 @@ export function buildModelRatioColumns({
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title={t('Model name')} />
       ),
-      cell: ({ row }) => (
-        <div className='flex items-center gap-2 font-medium'>
-          {row.getValue('name')}
-          {row.original.billingMode === 'tiered_expr' && (
-            <StatusBadge label={t('Tiered')} variant='info' copyable={false} />
-          )}
-          {row.original.hasConflict && (
-            <StatusBadge
-              label={t('Conflict')}
-              variant='danger'
-              copyable={false}
-            />
-          )}
-        </div>
-      ),
+      cell: ({ row }) => {
+        const isUnpriced = row.original.name === UNPRICED_MODEL_KEY
+        return (
+          <div className='flex items-center gap-2 font-medium'>
+            {isUnpriced ? t('Unpriced model') : row.getValue('name')}
+            {row.original.billingMode === 'tiered_expr' && (
+              <StatusBadge
+                label={t('Tiered')}
+                variant='info'
+                copyable={false}
+              />
+            )}
+            {row.original.hasConflict && (
+              <StatusBadge
+                label={t('Conflict')}
+                variant='danger'
+                copyable={false}
+              />
+            )}
+          </div>
+        )
+      },
       enableHiding: false,
     },
     {
@@ -137,24 +145,29 @@ export function buildModelRatioColumns({
     {
       id: 'actions',
       header: () => <div className='text-right'>{t('Actions')}</div>,
-      cell: ({ row }) => (
-        <div className='flex justify-end gap-2'>
-          <Button
-            variant='ghost'
-            size='sm'
-            onClick={() => onEdit(row.original)}
-          >
-            <Pencil />
-          </Button>
-          <Button
-            variant='ghost'
-            size='sm'
-            onClick={() => onDelete(row.original.name)}
-          >
-            <Trash2 />
-          </Button>
-        </div>
-      ),
+      cell: ({ row }) => {
+        const isUnpriced = row.original.name === UNPRICED_MODEL_KEY
+        return (
+          <div className='flex justify-end gap-2'>
+            <Button
+              variant='ghost'
+              size='sm'
+              onClick={() => onEdit(row.original)}
+            >
+              <Pencil />
+            </Button>
+            {!isUnpriced && (
+              <Button
+                variant='ghost'
+                size='sm'
+                onClick={() => onDelete(row.original.name)}
+              >
+                <Trash2 />
+              </Button>
+            )}
+          </div>
+        )
+      },
       enableHiding: false,
     },
   ]

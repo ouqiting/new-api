@@ -60,6 +60,7 @@ export type ModelRow = ModelPricingSnapshot & {
 export const hasPricingValue = (value?: string) =>
   value !== undefined && value !== ''
 
+export const UNPRICED_MODEL_KEY = 'unpriced-model'
 const toNumberOrNull = (value?: string) => {
   if (!hasPricingValue(value)) return null
   const num = Number(value)

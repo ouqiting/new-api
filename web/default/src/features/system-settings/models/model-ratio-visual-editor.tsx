@@ -64,6 +64,7 @@ import {
 import {
   buildModelSnapshots,
   getSnapshotSignature,
+  UNPRICED_MODEL_KEY,
   type ModelRow,
 } from './model-pricing-snapshots'
 import { buildModelRatioColumns } from './model-ratio-table-columns'
@@ -79,6 +80,7 @@ type ModelRatioVisualEditorProps = {
   savedAudioCompletionRatio: string
   savedBillingMode: string
   savedBillingExpr: string
+  savedUnpricedModelEnabled: boolean
   modelPrice: string
   modelRatio: string
   cacheRatio: string
@@ -89,6 +91,7 @@ type ModelRatioVisualEditorProps = {
   audioCompletionRatio: string
   billingMode: string
   billingExpr: string
+  unpricedModelEnabled: boolean
   onChange: (field: string, value: string) => void
   onSave: () => void | Promise<void>
   isSaving: boolean
@@ -125,6 +128,7 @@ const ModelRatioVisualEditorComponent = forwardRef<
     audioCompletionRatio,
     billingMode,
     billingExpr,
+    unpricedModelEnabled,
     onChange,
     onSave,
     isSaving,
@@ -214,7 +218,7 @@ const ModelRatioVisualEditorComponent = forwardRef<
     const draftByName = new Map(draftRows.map((row) => [row.name, row]))
     const modelNames = new Set([...savedByName.keys(), ...draftByName.keys()])
 
-    return Array.from(modelNames)
+    const rawModels = Array.from(modelNames)
       .map((name) => {
         const saved = savedByName.get(name)
         const draft = draftByName.get(name)
@@ -232,6 +236,43 @@ const ModelRatioVisualEditorComponent = forwardRef<
         }
       })
       .sort((a, b) => a.name.localeCompare(b.name))
+
+    const filteredModels = unpricedModelEnabled
+      ? rawModels
+      : rawModels.filter((model) => model.name !== UNPRICED_MODEL_KEY)
+
+    if (!unpricedModelEnabled) {
+      return filteredModels
+    }
+
+    const unpricedRow = rawModels.find(
+      (model) => model.name === UNPRICED_MODEL_KEY
+    )
+    const syntheticUnpricedRow: ModelRow = {
+      name: UNPRICED_MODEL_KEY,
+      price: '',
+      ratio: '',
+      cacheRatio: '',
+      createCacheRatio: '',
+      completionRatio: '',
+      imageRatio: '',
+      audioRatio: '',
+      audioCompletionRatio: '',
+      billingMode: undefined,
+      billingExpr: undefined,
+      requestRuleExpr: undefined,
+      hasConflict: false,
+      saved: undefined,
+      draft: undefined,
+      isDraftChanged: false,
+      isDraftDeleted: false,
+      isDraftNew: true,
+    }
+
+    return [
+      unpricedRow ?? syntheticUnpricedRow,
+      ...filteredModels.filter((model) => model.name !== UNPRICED_MODEL_KEY),
+    ]
   }, [
     savedModelPrice,
     savedModelRatio,
@@ -253,6 +294,7 @@ const ModelRatioVisualEditorComponent = forwardRef<
     audioCompletionRatio,
     billingMode,
     billingExpr,
+    unpricedModelEnabled,
   ])
 
   const modeCounts = useMemo(
@@ -327,6 +369,11 @@ const ModelRatioVisualEditorComponent = forwardRef<
 
   const handleDelete = useCallback(
     (name: string) => {
+      if (name === UNPRICED_MODEL_KEY) {
+        toast.error(t('The unpriced model entry cannot be deleted'))
+        return
+      }
+
       const priceMap = safeJsonParse<Record<string, number>>(modelPrice, {
         fallback: {},
         silent: true,
@@ -400,6 +447,7 @@ const ModelRatioVisualEditorComponent = forwardRef<
       )
     },
     [
+      t,
       modelPrice,
       modelRatio,
       cacheRatio,
@@ -811,6 +859,9 @@ export const ModelRatioVisualEditor = memo(
       prevProps.audioCompletionRatio === nextProps.audioCompletionRatio &&
       prevProps.billingMode === nextProps.billingMode &&
       prevProps.billingExpr === nextProps.billingExpr &&
+      prevProps.unpricedModelEnabled === nextProps.unpricedModelEnabled &&
+      prevProps.savedUnpricedModelEnabled ===
+        nextProps.savedUnpricedModelEnabled &&
       prevProps.onChange === nextProps.onChange &&
       prevProps.onSave === nextProps.onSave &&
       prevProps.isSaving === nextProps.isSaving

@@ -8,6 +8,17 @@ import (
 	"github.com/QuantumNous/new-api/types"
 )
 
+const UnpricedModelKey = "unpriced-model"
+
+var UnpricedModelEnabled = false
+
+func getUnpricedModelFallback(priceMap *types.RWMap[string, float64]) (float64, bool) {
+	if !UnpricedModelEnabled {
+		return 0, false
+	}
+	return priceMap.Get(UnpricedModelKey)
+}
+
 // from songquanpeng/one-api
 const (
 	USD2RMB = 7.3 // 暂定 1 USD = 7.3 RMB
@@ -379,13 +390,20 @@ func GetModelPrice(name string, printErr bool) (float64, bool) {
 
 	if strings.HasSuffix(name, CompactModelSuffix) {
 		price, ok := modelPriceMap.Get(CompactWildcardModelKey)
-		if !ok {
-			if printErr {
-				common.SysError("model price not found: " + name)
-			}
-			return -1, false
+		if ok {
+			return price, true
 		}
-		return price, true
+		if fallbackPrice, ok := getUnpricedModelFallback(modelPriceMap); ok {
+			return fallbackPrice, true
+		}
+		if printErr {
+			common.SysError("model price not found: " + name)
+		}
+		return -1, false
+	}
+
+	if fallbackPrice, ok := getUnpricedModelFallback(modelPriceMap); ok {
+		return fallbackPrice, true
 	}
 
 	if printErr {
@@ -415,7 +433,9 @@ func GetModelRatio(name string) (float64, bool, string) {
 			if wildcardRatio, ok := modelRatioMap.Get(CompactWildcardModelKey); ok {
 				return wildcardRatio, true, name
 			}
-			//return 0, true, name
+		}
+		if fallbackRatio, ok := getUnpricedModelFallback(modelRatioMap); ok {
+			return fallbackRatio, true, name
 		}
 		return 37.5, operation_setting.SelfUseModeEnabled, name
 	}
@@ -453,13 +473,20 @@ func GetCompletionRatio(name string) float64 {
 		if ratio, ok := completionRatioMap.Get(name); ok {
 			return ratio
 		}
+		if fallbackRatio, ok := getUnpricedModelFallback(completionRatioMap); ok {
+			return fallbackRatio
+		}
 	}
+
 	hardCodedRatio, contain := getHardcodedCompletionModelRatio(name)
 	if contain {
 		return hardCodedRatio
 	}
 	if ratio, ok := completionRatioMap.Get(name); ok {
 		return ratio
+	}
+	if fallbackRatio, ok := getUnpricedModelFallback(completionRatioMap); ok {
+		return fallbackRatio
 	}
 	return hardCodedRatio
 }
@@ -479,6 +506,12 @@ func GetCompletionRatioInfo(name string) CompletionRatioInfo {
 				Locked: false,
 			}
 		}
+		if fallbackRatio, ok := getUnpricedModelFallback(completionRatioMap); ok {
+			return CompletionRatioInfo{
+				Ratio:  fallbackRatio,
+				Locked: false,
+			}
+		}
 	}
 
 	hardCodedRatio, locked := getHardcodedCompletionModelRatio(name)
@@ -492,6 +525,13 @@ func GetCompletionRatioInfo(name string) CompletionRatioInfo {
 	if ratio, ok := completionRatioMap.Get(name); ok {
 		return CompletionRatioInfo{
 			Ratio:  ratio,
+			Locked: false,
+		}
+	}
+
+	if fallbackRatio, ok := getUnpricedModelFallback(completionRatioMap); ok {
+		return CompletionRatioInfo{
+			Ratio:  fallbackRatio,
 			Locked: false,
 		}
 	}
@@ -637,6 +677,9 @@ func GetAudioRatio(name string) float64 {
 	if ratio, ok := audioRatioMap.Get(name); ok {
 		return ratio
 	}
+	if fallbackRatio, ok := getUnpricedModelFallback(audioRatioMap); ok {
+		return fallbackRatio
+	}
 	return 1
 }
 
@@ -645,18 +688,27 @@ func GetAudioCompletionRatio(name string) float64 {
 	if ratio, ok := audioCompletionRatioMap.Get(name); ok {
 		return ratio
 	}
+	if fallbackRatio, ok := getUnpricedModelFallback(audioCompletionRatioMap); ok {
+		return fallbackRatio
+	}
 	return 1
 }
 
 func ContainsAudioRatio(name string) bool {
 	name = FormatMatchingModelName(name)
-	_, ok := audioRatioMap.Get(name)
+	if _, ok := audioRatioMap.Get(name); ok {
+		return true
+	}
+	_, ok := getUnpricedModelFallback(audioRatioMap)
 	return ok
 }
 
 func ContainsAudioCompletionRatio(name string) bool {
 	name = FormatMatchingModelName(name)
-	_, ok := audioCompletionRatioMap.Get(name)
+	if _, ok := audioCompletionRatioMap.Get(name); ok {
+		return true
+	}
+	_, ok := getUnpricedModelFallback(audioCompletionRatioMap)
 	return ok
 }
 
@@ -682,6 +734,9 @@ func UpdateImageRatioByJSONString(jsonStr string) error {
 func GetImageRatio(name string) (float64, bool) {
 	ratio, ok := imageRatioMap.Get(name)
 	if !ok {
+		if fallbackRatio, ok := getUnpricedModelFallback(imageRatioMap); ok {
+			return fallbackRatio, true
+		}
 		return 1, false // Default to 1 if not found
 	}
 	return ratio, true

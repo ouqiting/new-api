@@ -78,6 +78,7 @@ import {
   type PricingMode,
 } from './model-pricing-core'
 import { PriceInput, PriceLane } from './model-pricing-inputs'
+import { UNPRICED_MODEL_KEY } from './model-pricing-snapshots'
 import { formatPricingNumber } from './pricing-format'
 import { TieredPricingEditor } from './tiered-pricing-editor'
 
@@ -111,7 +112,11 @@ export const ModelPricingSheet = forwardRef<
 ) {
   const { t } = useTranslation()
   const title = editData ? t('Edit model pricing') : t('Add model pricing')
-  const description = editData?.name || t('New model')
+  const description = editData
+    ? editData.name === UNPRICED_MODEL_KEY
+      ? t('Unpriced model')
+      : editData.name
+    : t('New model')
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>

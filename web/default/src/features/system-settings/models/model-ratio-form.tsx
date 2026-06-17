@@ -52,6 +52,7 @@ type ModelFormValues = {
   AudioRatio: string
   AudioCompletionRatio: string
   ExposeRatioEnabled: boolean
+  UnpricedModelEnabled: boolean
   BillingMode: string
   BillingExpr: string
 }
@@ -244,6 +245,7 @@ export const ModelRatioForm = memo(function ModelRatioForm({
               savedAudioCompletionRatio={savedValues.AudioCompletionRatio}
               savedBillingMode={savedValues.BillingMode}
               savedBillingExpr={savedValues.BillingExpr}
+              savedUnpricedModelEnabled={savedValues.UnpricedModelEnabled}
               modelPrice={form.watch('ModelPrice')}
               modelRatio={form.watch('ModelRatio')}
               cacheRatio={form.watch('CacheRatio')}
@@ -254,6 +256,7 @@ export const ModelRatioForm = memo(function ModelRatioForm({
               audioCompletionRatio={form.watch('AudioCompletionRatio')}
               billingMode={form.watch('BillingMode')}
               billingExpr={form.watch('BillingExpr')}
+              unpricedModelEnabled={form.watch('UnpricedModelEnabled')}
               onSave={handleSave}
               isSaving={isSaving}
               onChange={(field, value) => {
@@ -277,6 +280,29 @@ export const ModelRatioForm = memo(function ModelRatioForm({
                     <FormDescription>
                       {t(
                         'Allow clients to query configured ratios via `/api/ratio`.'
+                      )}
+                    </FormDescription>
+                  </SettingsSwitchContent>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                </SettingsSwitchItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name='UnpricedModelEnabled'
+              render={({ field }) => (
+                <SettingsSwitchItem>
+                  <SettingsSwitchContent>
+                    <FormLabel>{t('Allow calling unpriced models')}</FormLabel>
+                    <FormDescription>
+                      {t(
+                        'When enabled, models without a configured price use the pricing set for the unpriced model entry.'
                       )}
                     </FormDescription>
                   </SettingsSwitchContent>

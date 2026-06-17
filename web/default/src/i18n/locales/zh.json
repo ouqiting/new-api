@@ -4566,6 +4566,10 @@
     "Failed to update plugin": "插件更新失败",
     "No plugins found": "未找到插件",
     "Disabled": "已停用",
-    "Enabled": "已启用"
+    "Enabled": "已启用",
+    "Allow calling unpriced models": "允许调用未设置价格模型",
+    "When enabled, models without a configured price use the pricing set for the unpriced model entry.": "开启后，未设置价格的模型将使用“未设置价格模型”条目中的定价。",
+    "Unpriced model": "未设置价格模型",
+    "The unpriced model entry cannot be deleted": "未设置价格模型条目不能删除"
   }
 }

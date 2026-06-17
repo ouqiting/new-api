@@ -4566,6 +4566,10 @@
     "Failed to update plugin": "Failed to update plugin",
     "No plugins found": "No plugins found",
     "Disabled": "Disabled",
-    "Enabled": "Enabled"
+    "Enabled": "Enabled",
+    "Allow calling unpriced models": "Allow calling unpriced models",
+    "When enabled, models without a configured price use the pricing set for the unpriced model entry.": "When enabled, models without a configured price use the pricing set for the unpriced model entry.",
+    "Unpriced model": "Unpriced model",
+    "The unpriced model entry cannot be deleted": "The unpriced model entry cannot be deleted"
   }
 }
