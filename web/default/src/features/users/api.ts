@@ -26,6 +26,8 @@ import type {
   ManageUserAction,
   ManageUserQuotaPayload,
   ApiResponse,
+  AdminUserApiKey,
+  GetAdminUserApiKeysResponse,
 } from './types'
 
 // ============================================================================
@@ -138,6 +140,43 @@ export async function resetUserPasskey(id: number): Promise<ApiResponse> {
  */
 export async function resetUserTwoFA(id: number): Promise<ApiResponse> {
   const res = await api.delete(`/api/user/${id}/2fa`)
+  return res.data
+}
+
+/**
+ * Get a user's API keys as an admin
+ */
+export async function getAdminUserApiKeys(
+  userId: number,
+  params: { p?: number; size?: number } = {}
+): Promise<GetAdminUserApiKeysResponse> {
+  const { p = 1, size = 20 } = params
+  const res = await api.get(`/api/user/${userId}/tokens?p=${p}&size=${size}`)
+  return res.data
+}
+
+/**
+ * Update a user's API key status as an admin
+ */
+export async function updateAdminUserApiKeyStatus(
+  userId: number,
+  tokenId: number,
+  status: number
+): Promise<ApiResponse<AdminUserApiKey>> {
+  const res = await api.put(`/api/user/${userId}/tokens/${tokenId}/status`, {
+    status,
+  })
+  return res.data
+}
+
+/**
+ * Delete a user's API key as an admin
+ */
+export async function deleteAdminUserApiKey(
+  userId: number,
+  tokenId: number
+): Promise<ApiResponse> {
+  const res = await api.delete(`/api/user/${userId}/tokens/${tokenId}`)
   return res.data
 }
 

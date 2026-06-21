@@ -125,6 +125,25 @@ export interface ManageUserQuotaPayload {
   value: number
 }
 
+export interface AdminUserApiKey {
+  id: number
+  name: string
+  status: number
+  group?: string | null
+  accessed_time: number
+}
+
+export interface GetAdminUserApiKeysResponse {
+  success: boolean
+  message?: string
+  data?: {
+    items: AdminUserApiKey[]
+    total: number
+    page: number
+    page_size: number
+  }
+}
+
 // ============================================================================
 // Dialog Types
 // ============================================================================
