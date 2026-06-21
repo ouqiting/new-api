@@ -225,11 +225,9 @@ func TokenAuthReadOnly() func(c *gin.Context) {
 		if strings.HasPrefix(key, "Bearer ") || strings.HasPrefix(key, "bearer ") {
 			key = strings.TrimSpace(key[7:])
 		}
-		key = strings.TrimPrefix(key, "sk-")
-		parts := strings.Split(key, "-")
-		key = parts[0]
+		key, _ = model.SplitTokenKey(key)
 
-		token, err := model.GetTokenByKey(key, false)
+		token, _, err := model.GetTokenByKeyFlexible(key, false)
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				c.JSON(http.StatusUnauthorized, gin.H{
@@ -321,15 +319,19 @@ func TokenAuth() func(c *gin.Context) {
 			if strings.HasPrefix(key, "Bearer ") || strings.HasPrefix(key, "bearer ") {
 				key = strings.TrimSpace(key[7:])
 			}
-			key = strings.TrimPrefix(key, "sk-")
-			parts = strings.Split(key, "-")
-			key = parts[0]
 		} else {
-			key = strings.TrimPrefix(key, "sk-")
-			parts = strings.Split(key, "-")
-			key = parts[0]
+			key = strings.TrimSpace(key)
 		}
-		token, err := model.ValidateUserToken(key)
+		baseKey, channelID := model.SplitTokenKey(key)
+		key = baseKey
+		parts = []string{key}
+		if channelID != "" {
+			parts = append(parts, channelID)
+		}
+		token, lookupKey, err := model.ValidateUserTokenFlexible(key)
+		if err == nil {
+			key = lookupKey
+		}
 		if token != nil {
 			id := c.GetInt("id")
 			if id == 0 {

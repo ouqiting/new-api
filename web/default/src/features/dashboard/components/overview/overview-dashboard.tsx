@@ -299,7 +299,7 @@ function RequestPreview(props: {
 
       const realCurl = buildCurlCommand({
         endpoint: props.example.endpoint,
-        apiKey: `sk-${key}`,
+        apiKey: key,
         model: props.example.model,
       })
       const copied = await copyToClipboard(realCurl)
@@ -589,7 +589,7 @@ export function OverviewDashboard() {
       model,
       keyName,
       keyId: preferredKey?.id,
-      displayKey: preferredKey ? formatDisplayKey(`sk-${preferredKey.key}`) : 'sk-...',
+      displayKey: preferredKey ? formatDisplayKey(preferredKey.key) : 'sk-...',
       ready,
     }
   }, [apiInfoItems, modelsQuery.data, preferredKey, t])

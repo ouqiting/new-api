@@ -48,12 +48,66 @@ func MaskTokenKey(key string) string {
 	return key[:4] + "**********" + key[len(key)-4:]
 }
 
+func hasStoredTokenPrefix(key string) bool {
+	return strings.Contains(key, "-")
+}
+
+func getFullTokenKey(key string) string {
+	if key == "" {
+		return ""
+	}
+	if hasStoredTokenPrefix(key) {
+		return key
+	}
+	return operation_setting.DefaultTokenKeyPrefix + "-" + key
+}
+
 func (token *Token) GetFullKey() string {
-	return token.Key
+	return getFullTokenKey(token.Key)
 }
 
 func (token *Token) GetMaskedKey() string {
-	return MaskTokenKey(token.Key)
+	return MaskTokenKey(token.GetFullKey())
+}
+
+func SplitTokenKey(raw string) (baseKey string, channelID string) {
+	baseKey = strings.TrimSpace(raw)
+	if baseKey == "" {
+		return "", ""
+	}
+
+	parts := strings.Split(baseKey, "-")
+	if len(parts) >= 3 && isPositiveInteger(parts[len(parts)-1]) {
+		channelID = parts[len(parts)-1]
+		baseKey = strings.Join(parts[:len(parts)-1], "-")
+	}
+	return baseKey, channelID
+}
+
+func isPositiveInteger(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func tokenKeyLookupCandidates(baseKey string) []string {
+	baseKey = strings.TrimSpace(baseKey)
+	if baseKey == "" {
+		return nil
+	}
+
+	candidates := []string{baseKey}
+	legacyPrefix := operation_setting.DefaultTokenKeyPrefix + "-"
+	if strings.HasPrefix(baseKey, legacyPrefix) {
+		candidates = append(candidates, strings.TrimPrefix(baseKey, legacyPrefix))
+	}
+	return candidates
 }
 
 func (token *Token) GetIpLimits() []string {
@@ -134,7 +188,10 @@ func SearchUserTokens(userId int, keyword string, token string, offset int, limi
 	}
 
 	if token != "" {
-		token = strings.TrimPrefix(token, "sk-")
+		candidates := tokenKeyLookupCandidates(token)
+		if len(candidates) > 1 {
+			token = candidates[1]
+		}
 	}
 
 	// 超量用户（令牌数超过上限）只允许精确搜索，禁止模糊搜索
@@ -225,6 +282,46 @@ func ValidateUserToken(key string) (token *Token, err error) {
 	return nil, fmt.Errorf("%w: %v", ErrDatabase, err)
 }
 
+func ValidateUserTokenFlexible(key string) (token *Token, lookupKey string, err error) {
+	if key == "" {
+		return nil, "", ErrTokenNotProvided
+	}
+	token, lookupKey, err = GetTokenByKeyFlexible(key, false)
+	if err == nil {
+		if token.Status == common.TokenStatusExhausted ||
+			token.Status == common.TokenStatusExpired ||
+			token.Status != common.TokenStatusEnabled {
+			return token, lookupKey, ErrTokenInvalid
+		}
+		if token.ExpiredTime != -1 && token.ExpiredTime < common.GetTimestamp() {
+			if !common.RedisEnabled {
+				token.Status = common.TokenStatusExpired
+				err := token.SelectUpdate()
+				if err != nil {
+					common.SysLog("failed to update token status" + err.Error())
+				}
+			}
+			return token, lookupKey, ErrTokenInvalid
+		}
+		if !token.UnlimitedQuota && token.RemainQuota <= 0 {
+			if !common.RedisEnabled {
+				token.Status = common.TokenStatusExhausted
+				err := token.SelectUpdate()
+				if err != nil {
+					common.SysLog("failed to update token status" + err.Error())
+				}
+			}
+			return token, lookupKey, ErrTokenInvalid
+		}
+		return token, lookupKey, nil
+	}
+	common.SysLog("ValidateUserTokenFlexible: failed to get token: " + err.Error())
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, lookupKey, ErrTokenInvalid
+	}
+	return nil, lookupKey, fmt.Errorf("%w: %v", ErrDatabase, err)
+}
+
 func GetTokenByIds(id int, userId int) (*Token, error) {
 	if id == 0 || userId == 0 {
 		return nil, errors.New("id 或 userId 为空！")
@@ -274,6 +371,25 @@ func GetTokenByKey(key string, fromDB bool) (token *Token, err error) {
 	fromDB = true
 	err = DB.Where(commonKeyCol+" = ?", key).First(&token).Error
 	return token, err
+}
+
+func GetTokenByKeyFlexible(key string, fromDB bool) (token *Token, lookupKey string, err error) {
+	candidates := tokenKeyLookupCandidates(key)
+	if len(candidates) == 0 {
+		return nil, "", gorm.ErrRecordNotFound
+	}
+
+	var lastErr error
+	for _, candidate := range candidates {
+		token, lastErr = GetTokenByKey(candidate, fromDB)
+		if lastErr == nil {
+			return token, candidate, nil
+		}
+		if !errors.Is(lastErr, gorm.ErrRecordNotFound) {
+			return nil, candidate, lastErr
+		}
+	}
+	return nil, candidates[0], lastErr
 }
 
 func (token *Token) Insert() error {

@@ -21,6 +21,7 @@ import { SensitiveWordsSection } from '../request-limits/sensitive-words-section
 import { SSRFSection } from '../request-limits/ssrf-section'
 import type { SecuritySettings } from '../types'
 import { createSectionRegistry } from '../utils/section-registry'
+import { ApiKeySettingsSection } from './api-key-settings-section'
 
 const SECURITY_SECTIONS = [
   {
@@ -36,6 +37,21 @@ const SECURITY_SECTIONS = [
           ModelRequestRateLimitDurationMinutes:
             settings.ModelRequestRateLimitDurationMinutes,
           ModelRequestRateLimitGroup: settings.ModelRequestRateLimitGroup,
+        }}
+      />
+    ),
+  },
+  {
+    id: 'api-key-settings',
+    titleKey: 'API Key Settings',
+    build: (settings: SecuritySettings) => (
+      <ApiKeySettingsSection
+        defaultValues={{
+          token_setting: {
+            key_prefix: settings['token_setting.key_prefix'],
+            random_key_prefix_enabled:
+              settings['token_setting.random_key_prefix_enabled'],
+          },
         }}
       />
     ),

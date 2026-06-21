@@ -146,7 +146,7 @@ function replaceToken(source: string, token: string, value: string) {
 function normalizeApiKey(apiKey: string): string {
   const trimmed = apiKey.trim()
   if (!trimmed) return ''
-  return trimmed.startsWith('sk-') ? trimmed : `sk-${trimmed}`
+  return trimmed.includes('-') ? trimmed : `sk-${trimmed}`
 }
 
 export function resolveChatUrl({

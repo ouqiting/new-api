@@ -26,10 +26,11 @@ export function sendToFluent(apiKey: string, serverAddress?: string): boolean {
     return false
   }
 
+  const normalizedApiKey = apiKey.includes('-') ? apiKey : `sk-${apiKey}`
   const payload = {
     id: 'new-api',
     baseUrl: serverAddress || window.location.origin,
-    apiKey: `sk-${apiKey}`,
+    apiKey: normalizedApiKey,
   }
 
   container.dispatchEvent(
