@@ -87,12 +87,27 @@ func buildPluginContext(c *gin.Context, info *relaycommon.RelayInfo) plugin.Cont
 	}
 }
 
+func getPluginRequestPayload(c *gin.Context, request dto.Request) ([]byte, error) {
+	if !strings.HasPrefix(c.Request.Header.Get("Content-Type"), "application/json") {
+		return common.Marshal(request)
+	}
+
+	storage, err := common.GetBodyStorage(c)
+	if err != nil {
+		return nil, err
+	}
+	if storage.Size() > 0 {
+		return storage.Bytes()
+	}
+	return common.Marshal(request)
+}
+
 func runPluginPreRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.Request) (*plugin.Result, error) {
 	if request == nil {
 		return nil, nil
 	}
 
-	payload, err := common.Marshal(request)
+	payload, err := getPluginRequestPayload(c, request)
 	if err != nil {
 		return nil, err
 	}
