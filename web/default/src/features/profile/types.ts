@@ -229,6 +229,10 @@ export interface CheckinStatusResponse {
   min_quota: number
   /** Maximum quota reward when random is enabled */
   max_quota: number
+  /** Whether minimum balance check is enabled */
+  min_balance_enabled: boolean
+  /** Minimum balance threshold for check-in eligibility */
+  min_balance: number
   /** Check-in statistics */
   stats: CheckinStats
 }

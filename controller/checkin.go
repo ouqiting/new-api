@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
@@ -35,12 +36,14 @@ func GetCheckinStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"data": gin.H{
-			"enabled":      setting.Enabled,
-			"random_quota": setting.RandomQuota,
-			"fixed_quota":  setting.FixedQuota,
-			"min_quota":    setting.MinQuota,
-			"max_quota":    setting.MaxQuota,
-			"stats":        stats,
+			"enabled":             setting.Enabled,
+			"random_quota":         setting.RandomQuota,
+			"fixed_quota":          setting.FixedQuota,
+			"min_quota":            setting.MinQuota,
+			"max_quota":            setting.MaxQuota,
+			"min_balance_enabled":  setting.MinBalanceEnabled,
+			"min_balance":          setting.MinBalance,
+			"stats":                stats,
 		},
 	})
 }
@@ -54,6 +57,26 @@ func DoCheckin(c *gin.Context) {
 	}
 
 	userId := c.GetInt("id")
+
+	// 如果启用了最小余额限制，校验用户余额
+	// 语义：余额小于 X 才能签到；若余额大于等于 X 则拒绝签到
+	if setting.MinBalanceEnabled {
+		userQuota, err := model.GetUserQuota(userId, true)
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "获取用户额度失败",
+			})
+			return
+		}
+		if userQuota >= setting.MinBalance {
+			amountStr := logger.LogQuota(setting.MinBalance)
+			common.ApiErrorI18n(c, i18n.MsgCheckinBalanceTooHigh, map[string]any{
+				"Amount": amountStr,
+			})
+			return
+		}
+	}
 
 	checkin, err := model.UserCheckin(userId)
 	if err != nil {

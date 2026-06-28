@@ -205,10 +205,11 @@ const (
 
 // Checkin related messages
 const (
-	MsgCheckinDisabled     = "checkin.disabled"
-	MsgCheckinAlreadyToday = "checkin.already_today"
-	MsgCheckinFailed       = "checkin.failed"
-	MsgCheckinQuotaFailed  = "checkin.quota_failed"
+	MsgCheckinDisabled       = "checkin.disabled"
+	MsgCheckinAlreadyToday   = "checkin.already_today"
+	MsgCheckinFailed         = "checkin.failed"
+	MsgCheckinQuotaFailed    = "checkin.quota_failed"
+	MsgCheckinBalanceTooHigh = "checkin.balance_too_high"
 )
 
 // Passkey related messages

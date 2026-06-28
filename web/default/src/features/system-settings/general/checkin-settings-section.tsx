@@ -53,6 +53,8 @@ const schema = z.object({
   fixedQuota: z.coerce.number().int().min(0),
   minQuota: z.coerce.number().int().min(0),
   maxQuota: z.coerce.number().int().min(0),
+  minBalanceEnabled: z.boolean(),
+  minBalance: z.coerce.number().int().min(0),
 })
 
 type Values = z.infer<typeof schema>
@@ -66,6 +68,8 @@ export function CheckinSettingsSection({
     fixedQuota: number
     minQuota: number
     maxQuota: number
+    minBalanceEnabled: boolean
+    minBalance: number
   }
 }) {
   const { t } = useTranslation()
@@ -79,12 +83,15 @@ export function CheckinSettingsSection({
       fixedQuota: defaultValues.fixedQuota,
       minQuota: defaultValues.minQuota,
       maxQuota: defaultValues.maxQuota,
+      minBalanceEnabled: defaultValues.minBalanceEnabled,
+      minBalance: defaultValues.minBalance,
     },
   })
 
   const { isDirty, isSubmitting } = form.formState
   const enabled = form.watch('enabled')
   const randomQuota = form.watch('randomQuota')
+  const minBalanceEnabled = form.watch('minBalanceEnabled')
 
   async function onSubmit(values: Values) {
     const updates: Array<{ key: string; value: string }> = []
@@ -121,6 +128,20 @@ export function CheckinSettingsSection({
       updates.push({
         key: 'checkin_setting.max_quota',
         value: String(values.maxQuota),
+      })
+    }
+
+    if (values.minBalanceEnabled !== defaultValues.minBalanceEnabled) {
+      updates.push({
+        key: 'checkin_setting.min_balance_enabled',
+        value: String(values.minBalanceEnabled),
+      })
+    }
+
+    if (values.minBalance !== defaultValues.minBalance) {
+      updates.push({
+        key: 'checkin_setting.min_balance',
+        value: String(values.minBalance),
       })
     }
 
@@ -301,6 +322,75 @@ export function CheckinSettingsSection({
                         </FormControl>
                         <FormDescription>
                           {t('Fixed quota amount awarded for each check-in')}
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              )}
+
+              <FormField
+                control={form.control}
+                name='minBalanceEnabled'
+                render={({ field }) => (
+                  <SettingsSwitchItem>
+                    <SettingsSwitchContent>
+                      <FormLabel>
+                        {t('Minimum balance required to check in')}
+                      </FormLabel>
+                      <FormDescription>
+                        {t(
+                          'When enabled, users whose balance is not less than the threshold cannot check in'
+                        )}
+                      </FormDescription>
+                    </SettingsSwitchContent>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                        disabled={updateOption.isPending || isSubmitting}
+                      />
+                    </FormControl>
+                  </SettingsSwitchItem>
+                )}
+              />
+
+              {minBalanceEnabled && (
+                <div className='grid gap-6 sm:grid-cols-2'>
+                  <FormField
+                    control={form.control}
+                    name='minBalance'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>
+                          {t('Minimum balance for check-in')}
+                        </FormLabel>
+                        <FormControl>
+                          <InputGroup>
+                            <InputGroupInput
+                              type='number'
+                              min={0}
+                              placeholder={t('0')}
+                              {...field}
+                            />
+                            <InputGroupAddon align='inline-end'>
+                              <InputGroupText>
+                                ={' '}
+                                {formatQuotaWithCurrency(
+                                  Number(field.value) || 0,
+                                  {
+                                    abbreviate: false,
+                                  }
+                                )}
+                              </InputGroupText>
+                            </InputGroupAddon>
+                          </InputGroup>
+                        </FormControl>
+                        <FormDescription>
+                          {t(
+                            'Users with a balance greater than or equal to this value cannot check in'
+                          )}
                         </FormDescription>
                         <FormMessage />
                       </FormItem>

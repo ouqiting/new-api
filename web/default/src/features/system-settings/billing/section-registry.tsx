@@ -198,6 +198,8 @@ const BILLING_SECTIONS = [
           fixedQuota: settings['checkin_setting.fixed_quota'],
           minQuota: settings['checkin_setting.min_quota'],
           maxQuota: settings['checkin_setting.max_quota'],
+          minBalanceEnabled: settings['checkin_setting.min_balance_enabled'],
+          minBalance: settings['checkin_setting.min_balance'],
         }}
       />
     ),

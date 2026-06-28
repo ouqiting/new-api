@@ -118,6 +118,13 @@ export function CheckinCalendarCard({
     })
   }, [checkinData?.random_quota, checkinData?.fixed_quota, t])
 
+  const minBalanceText = useMemo(() => {
+    if (!checkinData?.min_balance_enabled) return null
+    return t('Balance less than {{amount}} is required to check in', {
+      amount: formatQuotaWithCurrency(checkinData?.min_balance || 0),
+    })
+  }, [checkinData?.min_balance_enabled, checkinData?.min_balance, t])
+
   const todayString = useMemo(() => {
     const d = new Date()
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -477,6 +484,7 @@ export function CheckinCalendarCard({
                       {t('Rewards will be added directly to your balance')}
                     </li>
                     <li>{t('Do not repeat check-in; only once per day')}</li>
+                    {minBalanceText && <li>{minBalanceText}</li>}
                   </ul>
                 </div>
               </div>
