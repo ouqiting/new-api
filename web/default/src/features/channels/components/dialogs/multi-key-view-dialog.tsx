@@ -207,7 +207,16 @@ export function MultiKeyViewDialog(props: MultiKeyViewDialogProps) {
       >
         <div className='flex min-h-0 flex-1 flex-col space-y-4 overflow-hidden'>
           {/* Toolbar */}
-          <div className='flex shrink-0 items-center justify-end'>
+          <div className='flex shrink-0 items-center justify-end gap-2'>
+            <Button
+              variant='outline'
+              size='sm'
+              onClick={() => handleCopy(rows.map((r) => r.key).join('\n'), -1)}
+              disabled={rows.length === 0}
+            >
+              <Copy className='h-4 w-4' />
+              {t('Copy All')}
+            </Button>
             <Button
               variant='outline'
               size='sm'
