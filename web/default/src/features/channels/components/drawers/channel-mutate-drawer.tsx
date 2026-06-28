@@ -45,6 +45,7 @@ import {
   Settings,
   SlidersHorizontal,
   Wand2,
+  Table as TableIcon,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -156,6 +157,7 @@ import {
 } from '../dialogs/missing-models-confirmation-dialog'
 import { ParamOverrideEditorDialog } from '../dialogs/param-override-editor-dialog'
 import { StatusCodeRiskDialog } from '../dialogs/status-code-risk-dialog'
+import { MultiKeyViewDialog } from '../dialogs/multi-key-view-dialog'
 import { ModelMappingEditor } from '../model-mapping-editor'
 import {
   ChannelAdvancedSection,
@@ -300,6 +302,7 @@ export function ChannelMutateDrawer({
     ((action: MissingModelsAction) => void) | null
   >(null)
   const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false)
+  const [multiKeyViewDialogOpen, setMultiKeyViewDialogOpen] = useState(false)
   const [paramOverrideEditorOpen, setParamOverrideEditorOpen] = useState(false)
 
   const isEditing = Boolean(currentRow)
@@ -347,8 +350,10 @@ export function ChannelMutateDrawer({
     if (!open) {
       setChannelKey(null)
       setIsChannelKeyLoading(false)
+      setMultiKeyViewDialogOpen(false)
     } else if (channelId) {
       setChannelKey(null)
+      setMultiKeyViewDialogOpen(false)
     }
   }, [open, channelId])
 
@@ -682,11 +687,14 @@ export function ChannelMutateDrawer({
       const keyValue = res.data?.key ?? ''
       setChannelKey(keyValue)
       toast.success(t('Channel key unlocked'))
+      if (isMultiKeyChannel) {
+        setMultiKeyViewDialogOpen(true)
+      }
       return res
     } finally {
       setIsChannelKeyLoading(false)
     }
-  }, [channelId, t])
+  }, [channelId, t, isMultiKeyChannel])
 
   const handleRevealKey = useCallback(async () => {
     if (!channelId) return
@@ -1953,30 +1961,59 @@ export function ChannelMutateDrawer({
                                         ) : (
                                           <Eye className='mr-2 h-4 w-4' />
                                         )}
-                                        {t('Reveal key')}
+                                        {isMultiKeyChannel
+                                          ? t('Reveal keys')
+                                          : t('Reveal key')}
                                       </Button>
-                                      <Button
-                                        type='button'
-                                        variant='ghost'
-                                        size='sm'
-                                        onClick={async () => {
-                                          if (channelKey) {
-                                            await copyToClipboard(channelKey)
+                                      {isMultiKeyChannel ? (
+                                        <Button
+                                          type='button'
+                                          variant='ghost'
+                                          size='sm'
+                                          onClick={() =>
+                                            setMultiKeyViewDialogOpen(true)
                                           }
-                                        }}
-                                        disabled={!channelKey}
-                                      >
-                                        <Copy className='mr-2 h-4 w-4' />
-                                        {t('Copy')}
-                                      </Button>
+                                          disabled={!channelKey}
+                                        >
+                                          <TableIcon className='mr-2 h-4 w-4' />
+                                          {t('Manage Keys')}
+                                        </Button>
+                                      ) : (
+                                        <Button
+                                          type='button'
+                                          variant='ghost'
+                                          size='sm'
+                                          onClick={async () => {
+                                            if (channelKey) {
+                                              await copyToClipboard(channelKey)
+                                            }
+                                          }}
+                                          disabled={!channelKey}
+                                        >
+                                          <Copy className='mr-2 h-4 w-4' />
+                                          {t('Copy')}
+                                        </Button>
+                                      )}
                                     </div>
                                   </div>
-                                  <Input
-                                    readOnly
-                                    value={channelKey ?? ''}
-                                    placeholder={t('Hidden — verify to reveal')}
-                                    className='font-mono'
-                                  />
+                                  {isMultiKeyChannel ? (
+                                    <p className='text-muted-foreground text-xs'>
+                                      {channelKey
+                                        ? t(
+                                            'Keys revealed. Click "Manage Keys" to view and manage individual keys.'
+                                          )
+                                        : t(
+                                            'Multi-key channel. Reveal to verify identity and view all keys in a table.'
+                                          )}
+                                    </p>
+                                  ) : (
+                                    <Input
+                                      readOnly
+                                      value={channelKey ?? ''}
+                                      placeholder={t('Hidden — verify to reveal')}
+                                      className='font-mono'
+                                    />
+                                  )}
                                 </div>
                               )}
                               <FormMessage />
@@ -3479,6 +3516,13 @@ export function ChannelMutateDrawer({
         }}
         detailItems={statusCodeRiskDetailItems}
         onConfirm={() => handleStatusCodeRiskAction(true)}
+      />
+
+      <MultiKeyViewDialog
+        open={multiKeyViewDialogOpen}
+        onOpenChange={setMultiKeyViewDialogOpen}
+        fullKeyString={channelKey ?? ''}
+        isLoading={isChannelKeyLoading}
       />
     </>
   )
