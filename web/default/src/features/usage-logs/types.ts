@@ -189,6 +189,11 @@ export interface LogOtherData {
   subscription_consumed?: number
   subscription_remain?: number
   subscription_total?: number
+  // Plugin trigger fields (type=7)
+  plugin_id?: string
+  plugin_title?: string
+  plugin_action?: string
+  plugin_detail?: Record<string, unknown>
 }
 
 /**

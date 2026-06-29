@@ -2,10 +2,11 @@
   "id": "tool-call-guard",
   "title": "Tool Call Guard",
   "description": "禁止普通用户提交包含工具调用格式的 API 请求。",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "new-api",
   "entry": "main.js",
   "hooks": ["pre-request"],
   "capabilities": ["read-request", "deny-request"],
+  "log": true,
   "config": {}
 }

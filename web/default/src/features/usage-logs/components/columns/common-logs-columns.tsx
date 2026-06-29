@@ -105,6 +105,18 @@ function buildDetailSegments(
     return [{ text: t('Async task refund') }]
   }
 
+  if (log.type === 7) {
+    const segments: DetailSegment[] = []
+    const title = other?.plugin_title || other?.plugin_id
+    if (title) {
+      segments.push({ text: String(title) })
+    }
+    if (other?.plugin_action) {
+      segments.push({ text: String(other.plugin_action), muted: true })
+    }
+    return segments
+  }
+
   if (log.type !== 2) return []
 
   const isViolation = isViolationFeeLog(other)

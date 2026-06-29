@@ -702,6 +702,45 @@ export function DetailsDialog(props: DetailsDialogProps) {
             </DetailSection>
           )}
 
+          {/* Plugin trigger details (type=7) */}
+          {props.log.type === 7 && other && (
+            <DetailSection
+              icon={<Settings2 className='size-3.5' aria-hidden='true' />}
+              label={t('Plugin Details')}
+            >
+              {(other.plugin_title || other.plugin_id) && (
+                <DetailRow
+                  label={t('Plugin')}
+                  value={other.plugin_title || other.plugin_id}
+                />
+              )}
+              {other.plugin_id && (
+                <DetailRow label={t('Plugin ID')} value={other.plugin_id} mono />
+              )}
+              {other.plugin_action && (
+                <DetailRow
+                  label={t('Action')}
+                  value={other.plugin_action}
+                  mono
+                />
+              )}
+              {props.isAdmin &&
+                other.plugin_detail &&
+                Object.entries(other.plugin_detail).map(([key, value]) => (
+                  <DetailRow
+                    key={key}
+                    label={key}
+                    value={
+                      typeof value === 'string'
+                        ? value
+                        : JSON.stringify(value)
+                    }
+                    mono
+                  />
+                ))}
+            </DetailSection>
+          )}
+
           {/* Top-up audit info (type=1, admin only) */}
           {showTopupAuditSection && (
             <DetailSection

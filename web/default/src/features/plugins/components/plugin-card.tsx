@@ -34,6 +34,11 @@ export function PluginCard(props: PluginCardProps) {
                 {hook}
               </Badge>
             ))}
+            {plugin.log && (
+              <Badge variant='outline' className='text-[10px]'>
+                {t('Logging')}
+              </Badge>
+            )}
           </div>
         )}
         {plugin.error && (

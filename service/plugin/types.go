@@ -26,7 +26,11 @@ type Manifest struct {
 	Entry        string                 `json:"entry,omitempty"`
 	Hooks        []string               `json:"hooks,omitempty"`
 	Capabilities []string               `json:"capabilities,omitempty"`
-	Config       map[string]interface{} `json:"config,omitempty"`
+	// Log declares whether this plugin writes a usage log entry when it is
+	// triggered during a request. The actual per-trigger decision can still be
+	// overridden by the plugin via Result.Log.
+	Log    bool                   `json:"log,omitempty"`
+	Config map[string]interface{} `json:"config,omitempty"`
 }
 
 // Plugin represents a loaded plugin, including its disk path and runtime state.
@@ -56,10 +60,19 @@ type Event struct {
 
 // Result is the response expected from a plugin.
 type Result struct {
-	Action  string          `json:"action"`
-	Code    int             `json:"code,omitempty"`
-	Error   string          `json:"error,omitempty"`
+	Action string          `json:"action"`
+	Code   int             `json:"code,omitempty"`
+	Error  string          `json:"error,omitempty"`
 	Request json.RawMessage `json:"request,omitempty"`
+	// Log lets a plugin decide, per trigger, whether to write a usage log entry.
+	// nil => fall back to the manifest's Log flag; non-nil => explicit override.
+	Log *bool `json:"log,omitempty"`
+	// LogContent is the human-readable message stored in the log entry. When
+	// empty a default message is generated from the plugin title and action.
+	LogContent string `json:"logContent,omitempty"`
+	// LogDetail is arbitrary extra information stored in the log's Other field
+	// (visible to admin/root only).
+	LogDetail map[string]interface{} `json:"logDetail,omitempty"`
 }
 
 // IsLoaded returns true if the plugin has an entry and the process is running.

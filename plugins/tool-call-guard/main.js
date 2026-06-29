@@ -115,6 +115,13 @@ rl.on('line', (line) => {
         action: 'deny',
         code: 400,
         error: DENY_MESSAGE,
+        log: true,
+        logContent: '插件「Tool Call Guard」拦截了普通用户的工具调用请求',
+        logDetail: {
+          reason: 'tool_call_detected',
+          role: role || 'user',
+          model: event.context?.model || '',
+        },
       })
     );
   } else {

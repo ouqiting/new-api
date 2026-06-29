@@ -44,9 +44,26 @@ func SetEnabled(pluginId string, enabled bool) error {
 	return defaultManager.SetEnabled(pluginId, enabled)
 }
 
+// HookOutcome captures, for a single plugin invocation, the plugin identity,
+// the raw result, and the effective decision about whether a usage log should
+// be written for this trigger.
+type HookOutcome struct {
+	PluginID    string
+	PluginTitle string
+	Result      *Result
+	ShouldLog   bool
+}
+
 // RunPreRequest executes all enabled plugins that subscribe to the pre-request hook.
 func RunPreRequest(ctx Context, request []byte) (*Result, []byte, error) {
 	return defaultManager.RunHook(HookPreRequest, ctx, request)
+}
+
+// RunPreRequestWithOutcomes is like RunPreRequest but also returns, for every
+// plugin that produced a non-allow / loggable result, an outcome describing
+// whether a usage log entry should be written.
+func RunPreRequestWithOutcomes(ctx Context, request []byte) (*Result, []byte, []HookOutcome, error) {
+	return defaultManager.RunHookWithOutcomes(HookPreRequest, ctx, request)
 }
 
 // RunPostResponse executes all enabled plugins that subscribe to the post-response hook.
@@ -263,6 +280,13 @@ func (m *Manager) SetEnabled(pluginId string, enabled bool) error {
 // RunHook executes all enabled plugins subscribed to the given hook.
 // It returns the first deny result, or the last modified payload, or nil if all allowed.
 func (m *Manager) RunHook(hook string, ctx Context, payload []byte) (*Result, []byte, error) {
+	deny, finalPayload, _, err := m.RunHookWithOutcomes(hook, ctx, payload)
+	return deny, finalPayload, err
+}
+
+// RunHookWithOutcomes behaves like RunHook but also collects per-plugin outcomes
+// describing whether each triggered plugin requested a usage log entry.
+func (m *Manager) RunHookWithOutcomes(hook string, ctx Context, payload []byte) (*Result, []byte, []HookOutcome, error) {
 	m.mu.RLock()
 	plugins := make([]*Plugin, 0, len(m.plugins))
 	processes := make(map[string]*pluginProcess, len(m.processes))
@@ -277,13 +301,15 @@ func (m *Manager) RunHook(hook string, ctx Context, payload []byte) (*Result, []
 	m.mu.RUnlock()
 
 	if len(plugins) == 0 {
-		return nil, payload, nil
+		return nil, payload, nil, nil
 	}
 
 	var currentPayload []byte
 	if len(payload) > 0 {
 		currentPayload = append([]byte(nil), payload...)
 	}
+
+	outcomes := make([]HookOutcome, 0, len(plugins))
 
 	for _, p := range plugins {
 		pp, ok := m.processes[p.ID]
@@ -306,21 +332,45 @@ func (m *Manager) RunHook(hook string, ctx Context, payload []byte) (*Result, []
 			continue
 		}
 
+		shouldLog := resolveShouldLog(p, result)
+		outcome := HookOutcome{
+			PluginID:    p.ID,
+			PluginTitle: p.Title,
+			Result:      result,
+			ShouldLog:   shouldLog,
+		}
+
 		switch result.Action {
 		case ActionDeny:
-			return result, currentPayload, nil
+			outcomes = append(outcomes, outcome)
+			return result, currentPayload, outcomes, nil
 		case ActionModify:
 			if len(result.Request) > 0 {
 				currentPayload = append([]byte(nil), result.Request...)
 			}
+			outcomes = append(outcomes, outcome)
 		case ActionAllow:
-			// do nothing
+			if shouldLog {
+				outcomes = append(outcomes, outcome)
+			}
 		default:
 			common.SysLog(fmt.Sprintf("plugin %s returned unknown action: %s", p.ID, result.Action))
+			if shouldLog {
+				outcomes = append(outcomes, outcome)
+			}
 		}
 	}
 
-	return nil, currentPayload, nil
+	return nil, currentPayload, outcomes, nil
+}
+
+// resolveShouldLog determines whether a usage log should be written for a single
+// plugin trigger. A per-trigger Result.Log overrides the manifest Log flag.
+func resolveShouldLog(p *Plugin, result *Result) bool {
+	if result.Log != nil {
+		return *result.Log
+	}
+	return p.Log
 }
 
 // Reload rescans the plugin directory and reloads enabled plugins.

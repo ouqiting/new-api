@@ -7,6 +7,7 @@ export interface PluginManifest {
   entry?: string
   hooks?: string[]
   capabilities?: string[]
+  log?: boolean
   config?: Record<string, unknown>
 }
 

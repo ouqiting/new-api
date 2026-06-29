@@ -64,6 +64,7 @@ const (
 	LogTypeSystem  = 4
 	LogTypeError   = 5
 	LogTypeRefund  = 6
+	LogTypePlugin  = 7
 )
 
 func formatUserLogs(logs []*Log, startIdx int) {
@@ -127,6 +128,53 @@ func RecordLogWithAdminInfo(userId int, logType int, content string, adminInfo m
 	}
 	if err := LOG_DB.Create(log).Error; err != nil {
 		common.SysLog("failed to record log: " + err.Error())
+	}
+}
+
+// RecordPluginLogParams carries the information for a plugin trigger log entry.
+type RecordPluginLogParams struct {
+	PluginId    string                 `json:"plugin_id"`
+	PluginTitle string                 `json:"plugin_title"`
+	Action      string                 `json:"action"`
+	ModelName   string                 `json:"model_name"`
+	TokenName   string                 `json:"token_name"`
+	TokenId     int                    `json:"token_id"`
+	Group       string                 `json:"group"`
+	Detail      map[string]interface{} `json:"detail"`
+}
+
+// RecordPluginLog writes a LogTypePlugin entry when a plugin is triggered for a user request.
+func RecordPluginLog(c *gin.Context, userId int, content string, params RecordPluginLogParams) {
+	username, _ := GetUsernameById(userId, false)
+	var requestId string
+	if c != nil {
+		requestId = c.GetString(common.RequestIdKey)
+	}
+
+	other := map[string]interface{}{
+		"plugin_id":    params.PluginId,
+		"plugin_title": params.PluginTitle,
+		"plugin_action": params.Action,
+	}
+	if len(params.Detail) > 0 {
+		other["plugin_detail"] = params.Detail
+	}
+
+	log := &Log{
+		UserId:    userId,
+		Username:  username,
+		CreatedAt: common.GetTimestamp(),
+		Type:      LogTypePlugin,
+		Content:   content,
+		ModelName: params.ModelName,
+		TokenName: params.TokenName,
+		TokenId:   params.TokenId,
+		Group:     params.Group,
+		RequestId: requestId,
+		Other:     common.MapToJsonStr(other),
+	}
+	if err := LOG_DB.Create(log).Error; err != nil {
+		common.SysLog("failed to record plugin log: " + err.Error())
 	}
 }
 

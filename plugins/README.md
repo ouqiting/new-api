@@ -54,6 +54,7 @@ plugins/
 | `entry` | 否 | 入口文件相对路径。如果为空，则插件只作为可启用/停用的标记，不会执行。 |
 | `hooks` | 否 | 插件订阅的事件数组，可选值：`startup`、`pre-request`、`post-response`。 |
 | `capabilities` | 否 | 插件声明的能力，用于文档和后续权限控制。 |
+| `log` | 否 | 是否在插件触发时写入「插件」类别的使用日志（默认 `false`）。可被插件返回结果中的 `log` 字段按次覆盖。 |
 | `config` | 否 | 插件默认配置对象，可在后续版本中通过后台调整。 |
 
 ## 执行模型
@@ -156,6 +157,32 @@ plugins/
 ```
 
 表示将当前请求体/响应体替换为 `request` 字段中的完整 JSON。注意：如果多个插件都返回 `modify`，后执行的插件会覆盖前者。
+
+### 日志字段（可选）
+
+任意动作（`allow` / `deny` / `modify`）都可以附带日志字段，用于在「插件」类别的使用日志中记录本次触发，便于管理员和 root 用户在请求日志中查看是哪位用户触发了哪个插件：
+
+```json
+{
+  "action": "deny",
+  "code": 400,
+  "error": "普通用户禁止调用工具",
+  "log": true,
+  "logContent": "插件「Tool Call Guard」拦截了普通用户的工具调用请求",
+  "logDetail": {
+    "reason": "tool_call_detected",
+    "role": "user"
+  }
+}
+```
+
+| 字段 | 说明 |
+|---|---|
+| `log` | 是否为本次触发写入日志。省略时使用 `plugin.json` 中的 `log` 值；显式设置 `true`/`false` 可按次覆盖。 |
+| `logContent` | 日志内容（`content`）。省略时由插件标题与动作自动生成默认文案。 |
+| `logDetail` | 附加详情对象，存入日志的 `other` 字段，仅管理员 / root 在日志详情中可见。 |
+
+日志会记录用户、模型、令牌、分组与请求 ID 等信息，类别为「插件」（`LogTypePlugin`）。
 
 ## 开发示例
 

@@ -113,11 +113,58 @@ func runPluginPreRequest(c *gin.Context, info *relaycommon.RelayInfo, request dt
 	}
 
 	ctx := buildPluginContext(c, info)
-	result, _, err := plugin.RunPreRequest(ctx, payload)
+	result, _, outcomes, err := plugin.RunPreRequestWithOutcomes(ctx, payload)
 	if err != nil {
 		return nil, err
 	}
+
+	recordPluginLogs(c, info, outcomes)
 	return result, nil
+}
+
+// recordPluginLogs writes a usage log entry for every plugin trigger that
+// requested logging. The log is visible to admin/root users under the
+// "Plugin" log category.
+func recordPluginLogs(c *gin.Context, info *relaycommon.RelayInfo, outcomes []plugin.HookOutcome) {
+	for _, outcome := range outcomes {
+		if !outcome.ShouldLog || outcome.Result == nil {
+			continue
+		}
+
+		content := outcome.Result.LogContent
+		if content == "" {
+			content = buildDefaultPluginLogContent(outcome)
+		}
+
+		model.RecordPluginLog(c, info.UserId, content, model.RecordPluginLogParams{
+			PluginId:    outcome.PluginID,
+			PluginTitle: outcome.PluginTitle,
+			Action:      outcome.Result.Action,
+			ModelName:   info.OriginModelName,
+			TokenName:   info.TokenKey,
+			TokenId:     info.TokenId,
+			Group:       info.UserGroup,
+			Detail:      outcome.Result.LogDetail,
+		})
+	}
+}
+
+func buildDefaultPluginLogContent(outcome plugin.HookOutcome) string {
+	title := outcome.PluginTitle
+	if title == "" {
+		title = outcome.PluginID
+	}
+	switch outcome.Result.Action {
+	case plugin.ActionDeny:
+		if outcome.Result.Error != "" {
+			return fmt.Sprintf("插件「%s」拦截了请求：%s", title, outcome.Result.Error)
+		}
+		return fmt.Sprintf("插件「%s」拦截了请求", title)
+	case plugin.ActionModify:
+		return fmt.Sprintf("插件「%s」修改了请求", title)
+	default:
+		return fmt.Sprintf("插件「%s」已触发", title)
+	}
 }
 
 func Relay(c *gin.Context, relayFormat types.RelayFormat) {
