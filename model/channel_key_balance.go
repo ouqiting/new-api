@@ -3,6 +3,7 @@ package model
 import (
 	"github.com/QuantumNous/new-api/common"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // ChannelKeyBalance stores per-key balance information for multi-key channels.
@@ -30,7 +31,18 @@ func SaveChannelKeyBalance(channelId int, keyIndex int, balance float64, statusC
 		ErrorMessage:       errorMessage,
 		BalanceUpdatedTime: common.GetTimestamp(),
 	}
-	return DB.Save(&record).Error
+	return DB.Clauses(clause.OnConflict{
+		Columns: []clause.Column{
+			{Name: "channel_id"},
+			{Name: "key_index"},
+		},
+		DoUpdates: clause.AssignmentColumns([]string{
+			"balance",
+			"status_code",
+			"error_message",
+			"balance_updated_time",
+		}),
+	}).Create(&record).Error
 }
 
 // GetChannelKeyBalances returns all balance records for the given channel.
