@@ -96,12 +96,12 @@ rl.on('line', (line) => {
   try {
     event = JSON.parse(line);
   } catch (err) {
-    console.log(JSON.stringify({ action: 'allow' }));
+    console.log(JSON.stringify({ action: 'allow', log: false }));
     return;
   }
 
   if (event.hook !== 'pre-request') {
-    console.log(JSON.stringify({ action: 'allow' }));
+    console.log(JSON.stringify({ action: 'allow', log: false }));
     return;
   }
 
@@ -125,6 +125,6 @@ rl.on('line', (line) => {
       })
     );
   } else {
-    console.log(JSON.stringify({ action: 'allow' }));
+    console.log(JSON.stringify({ action: 'allow', log: false }));
   }
 });
