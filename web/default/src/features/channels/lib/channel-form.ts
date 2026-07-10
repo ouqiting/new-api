@@ -422,7 +422,9 @@ export function transformChannelToFormDefaults(
     header_override: channel.header_override || '',
     settings: channel.settings || '{}',
     other: channel.other || '',
-    multi_key_mode: 'single',
+    multi_key_mode: channel.channel_info?.is_multi_key
+      ? 'multi_to_single'
+      : 'single',
     multi_key_type: channel.channel_info.multi_key_mode || 'random',
     batch_add_set_key_prefix_2_name: false,
     key_mode: 'append', // Default to append mode for editing multi-key channels
@@ -634,7 +636,11 @@ export function transformFormDataToCreatePayload(formData: ChannelFormValues): {
 export function transformFormDataToUpdatePayload(
   formData: ChannelFormValues,
   channelId: number
-): Partial<Channel> {
+): Partial<Channel> & {
+  multi_key_mode?: 'single' | 'multi_to_single'
+  multi_key_type?: 'random' | 'polling' | 'fill_first'
+  key_mode?: 'append' | 'replace'
+} {
   const payload: Partial<Channel> = {
     id: channelId,
     name: formData.name,
@@ -682,7 +688,21 @@ export function transformFormDataToUpdatePayload(
   payload.param_override = formData.param_override || ''
   payload.header_override = formData.header_override || ''
 
-  return payload
+  const result: ReturnType<typeof transformFormDataToUpdatePayload> = {
+    ...payload,
+    multi_key_mode:
+      (formData.multi_key_mode === 'multi_to_single'
+        ? 'multi_to_single'
+        : 'single') as 'single' | 'multi_to_single',
+  }
+  if (formData.multi_key_mode === 'multi_to_single') {
+    result.multi_key_type = formData.multi_key_type || 'random'
+  }
+  if (formData.key_mode) {
+    result.key_mode = formData.key_mode
+  }
+
+  return result
 }
 
 // ============================================================================

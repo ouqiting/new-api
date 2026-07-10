@@ -117,6 +117,7 @@ import {
 } from '../../api'
 import {
   ADD_MODE_OPTIONS,
+  EDIT_MODE_OPTIONS,
   CHANNEL_TYPE_OPTIONS,
   CHANNEL_TYPE_WARNINGS,
   ERROR_MESSAGES,
@@ -404,6 +405,10 @@ export function ChannelMutateDrawer({
   const isBatchMode =
     multiKeyMode === 'batch' || multiKeyMode === 'multi_to_single'
   const isChannelDetailLoading = isEditing && isChannelLoading
+  // Whether the channel is effectively in multi-key mode (either originally or switched via Add Mode)
+  const isEffectiveMultiKey = isEditing
+    ? multiKeyMode === 'multi_to_single'
+    : multiKeyMode === 'multi_to_single'
 
   // Get all models list
   const allModelsList = useMemo(
@@ -1849,12 +1854,67 @@ export function ChannelMutateDrawer({
                         />
                       )}
 
+                      {isEditing && currentType !== 57 && (
+                        <FormField
+                          control={form.control}
+                          name='multi_key_mode'
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>{t('Add Mode')}</FormLabel>
+                              <Select
+                                items={[
+                                  ...EDIT_MODE_OPTIONS.map((option) => ({
+                                    value: option.value,
+                                    label: t(option.label),
+                                  })),
+                                ]}
+                                onValueChange={field.onChange}
+                                value={field.value}
+                              >
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent alignItemWithTrigger={false}>
+                                  <SelectGroup>
+                                    {EDIT_MODE_OPTIONS.map((option) => (
+                                      <SelectItem
+                                        key={option.value}
+                                        value={option.value}
+                                      >
+                                        {t(option.label)}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectGroup>
+                                </SelectContent>
+                              </Select>
+                              <FormDescription>
+                                {field.value === 'multi_to_single'
+                                  ? t(
+                                      'Switch to multi-key mode: enter multiple keys (one per line) for this channel'
+                                    )
+                                  : t(
+                                      'Switch to single-key mode: enter a single key for this channel'
+                                    )}
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      )}
+
                       <FormField
                         control={form.control}
                         name='key'
                         render={({ field }) => {
                           const keyPlaceholder = (() => {
                             if (isEditing) {
+                              if (isBatchMode) {
+                                return t(
+                                  'Enter one key per line, or leave empty to keep existing keys'
+                                )
+                              }
                               return t('Leave empty to keep existing key')
                             }
                             if (currentType === 33) {
@@ -1895,10 +1955,14 @@ export function ChannelMutateDrawer({
                                   <span>
                                     {isEditing ? (
                                       <>
-                                        {t(
-                                          'Enter new key to update, or leave empty to keep current key'
-                                        )}
-                                        {isMultiKeyChannel && (
+                                        {isEffectiveMultiKey
+                                          ? t(
+                                              'Enter new key(s) to update. Leave empty to keep existing keys.'
+                                            )
+                                          : t(
+                                              'Enter new key to update, or leave empty to keep current key'
+                                            )}
+                                        {isEffectiveMultiKey && (
                                           <span className='text-warning mt-1 block'>
                                             {t(
                                               'Multi-key channel: Keys will be'
@@ -2083,7 +2147,7 @@ export function ChannelMutateDrawer({
                         }}
                       />
 
-                      {isEditing && isMultiKeyChannel && (
+                      {isEditing && isMultiKeyChannel && isEffectiveMultiKey && (
                         <FormField
                           control={form.control}
                           name='key_mode'
@@ -2136,7 +2200,7 @@ export function ChannelMutateDrawer({
                       )}
 
                       {((!isEditing && multiKeyMode === 'multi_to_single') ||
-                        isMultiKeyChannel) && (
+                        (isEditing && isEffectiveMultiKey)) && (
                         <FormField
                           control={form.control}
                           name='multi_key_type'

@@ -135,7 +135,11 @@ export async function createChannel(
  */
 export async function updateChannel(
   id: number,
-  data: Partial<Channel>
+  data: Partial<Channel> & {
+    multi_key_mode?: 'single' | 'multi_to_single'
+    multi_key_type?: 'random' | 'polling' | 'fill_first'
+    key_mode?: 'append' | 'replace'
+  }
 ): Promise<{ success: boolean; message?: string; data?: Channel }> {
   const res = await api.put(
     '/api/channel/',

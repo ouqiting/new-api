@@ -856,8 +856,9 @@ func DeleteChannelBatch(c *gin.Context) {
 
 type PatchChannel struct {
 	model.Channel
-	MultiKeyMode *string `json:"multi_key_mode"`
-	KeyMode      *string `json:"key_mode"` // 多key模式下密钥覆盖或者追加
+	MultiKeyMode *string `json:"multi_key_mode"`       // 添加模式: "single" 或 "multi_to_single"
+	MultiKeyType *string `json:"multi_key_type"`      // 多密钥策略: "random", "polling", "fill_first"
+	KeyMode      *string `json:"key_mode"`            // 多key模式下密钥覆盖或者追加
 }
 
 func UpdateChannel(c *gin.Context) {
@@ -889,9 +890,115 @@ func UpdateChannel(c *gin.Context) {
 	// Always copy the original ChannelInfo so that fields like IsMultiKey and MultiKeySize are retained.
 	channel.ChannelInfo = originChannel.ChannelInfo
 
-	// If the request explicitly specifies a new MultiKeyMode, apply it on top of the original info.
-	if channel.MultiKeyMode != nil && *channel.MultiKeyMode != "" {
-		channel.ChannelInfo.MultiKeyMode = constant.MultiKeyMode(*channel.MultiKeyMode)
+	// Handle mode switching based on the multi_key_mode field from the request.
+	if channel.MultiKeyMode != nil {
+		mode := *channel.MultiKeyMode
+		switch mode {
+		case "multi_to_single":
+			// Switch to multi-key mode (or stay in multi-key mode)
+			if !channel.ChannelInfo.IsMultiKey {
+				// Switching from single-key to multi-key mode
+				channel.ChannelInfo.IsMultiKey = true
+				channel.ChannelInfo.MultiKeyStatusList = nil
+				channel.ChannelInfo.MultiKeyDisabledReason = nil
+				channel.ChannelInfo.MultiKeyDisabledTime = nil
+				channel.ChannelInfo.MultiKeyPollingIndex = 0
+				channel.ChannelInfo.MultiKeyFillFirstIndex = nil
+				channel.ChannelInfo.MultiKeyFillFirstFail = nil
+
+				// If a key was provided, process it into multi-key format
+				if channel.Key != "" {
+					if channel.Type == constant.ChannelTypeVertexAi && channel.GetOtherSettings().VertexKeyType != dto.VertexKeyTypeAPIKey {
+						array, err := getVertexArrayKeys(channel.Key)
+						if err != nil {
+							c.JSON(http.StatusOK, gin.H{
+								"success": false,
+								"message": "密钥解析失败: " + err.Error(),
+							})
+							return
+						}
+						channel.Key = strings.Join(array, "\n")
+						channel.ChannelInfo.MultiKeySize = len(array)
+					} else {
+						cleanKeys := make([]string, 0)
+						for _, key := range strings.Split(channel.Key, "\n") {
+							key = strings.TrimSpace(key)
+							if key != "" {
+								cleanKeys = append(cleanKeys, key)
+							}
+						}
+						channel.Key = strings.Join(cleanKeys, "\n")
+						channel.ChannelInfo.MultiKeySize = len(cleanKeys)
+					}
+				} else if originChannel.Key != "" {
+					// No new key provided, keep the existing single key as the only multi-key
+					channel.ChannelInfo.MultiKeySize = 1
+				}
+			} else {
+				// Already multi-key, update MultiKeySize if key was changed
+				if channel.Key != "" && channel.KeyMode != nil && *channel.KeyMode == "replace" {
+					if channel.Type == constant.ChannelTypeVertexAi && channel.GetOtherSettings().VertexKeyType != dto.VertexKeyTypeAPIKey {
+						array, err := getVertexArrayKeys(channel.Key)
+						if err != nil {
+							c.JSON(http.StatusOK, gin.H{
+								"success": false,
+								"message": "密钥解析失败: " + err.Error(),
+							})
+							return
+						}
+						channel.ChannelInfo.MultiKeySize = len(array)
+					} else {
+						cleanKeys := make([]string, 0)
+						for _, key := range strings.Split(channel.Key, "\n") {
+							key = strings.TrimSpace(key)
+							if key != "" {
+								cleanKeys = append(cleanKeys, key)
+							}
+						}
+						channel.ChannelInfo.MultiKeySize = len(cleanKeys)
+					}
+				}
+			}
+
+			// Apply the multi-key strategy if provided
+			if channel.MultiKeyType != nil && *channel.MultiKeyType != "" {
+				channel.ChannelInfo.MultiKeyMode = constant.MultiKeyMode(*channel.MultiKeyType)
+			}
+		case "single":
+			// Switch to single-key mode (or stay in single-key mode)
+			if channel.ChannelInfo.IsMultiKey {
+				// Switching from multi-key to single-key mode
+				channel.ChannelInfo.IsMultiKey = false
+				channel.ChannelInfo.MultiKeySize = 0
+				channel.ChannelInfo.MultiKeyStatusList = nil
+				channel.ChannelInfo.MultiKeyDisabledReason = nil
+				channel.ChannelInfo.MultiKeyDisabledTime = nil
+				channel.ChannelInfo.MultiKeyPollingIndex = 0
+				channel.ChannelInfo.MultiKeyFillFirstIndex = nil
+				channel.ChannelInfo.MultiKeyFillFirstFail = nil
+
+				// If no new key was provided, keep only the first existing key
+				if channel.Key == "" && originChannel.Key != "" {
+					trimmed := strings.TrimSpace(originChannel.Key)
+					if strings.HasPrefix(trimmed, "[") {
+						// JSON array format - extract first element
+						var arr []json.RawMessage
+						if err := json.Unmarshal([]byte(trimmed), &arr); err == nil && len(arr) > 0 {
+							channel.Key = string(arr[0])
+						}
+					} else {
+						// Newline-separated format - take first line
+						keys := strings.Split(strings.Trim(originChannel.Key, "\n"), "\n")
+						if len(keys) > 0 {
+							channel.Key = strings.TrimSpace(keys[0])
+						}
+					}
+				}
+			}
+		}
+	} else if channel.MultiKeyType != nil && *channel.MultiKeyType != "" {
+		// Backward compatibility: if only multi_key_type is sent (no mode), apply strategy directly
+		channel.ChannelInfo.MultiKeyMode = constant.MultiKeyMode(*channel.MultiKeyType)
 	}
 
 	// 处理多key模式下的密钥追加/覆盖逻辑
@@ -969,9 +1076,27 @@ func UpdateChannel(c *gin.Context) {
 
 				allKeys := append(existingKeys, dedupedNewKeys...)
 				channel.Key = strings.Join(allKeys, "\n")
+				channel.ChannelInfo.MultiKeySize = len(allKeys)
 			}
 		case "replace":
 			// 覆盖模式：直接使用新密钥（默认行为，不需要特殊处理）
+			// Update MultiKeySize based on the new keys
+			if channel.Key != "" {
+				if channel.Type == constant.ChannelTypeVertexAi && channel.GetOtherSettings().VertexKeyType != dto.VertexKeyTypeAPIKey {
+					array, err := getVertexArrayKeys(channel.Key)
+					if err == nil {
+						channel.ChannelInfo.MultiKeySize = len(array)
+					}
+				} else {
+					count := 0
+					for _, key := range strings.Split(channel.Key, "\n") {
+						if strings.TrimSpace(key) != "" {
+							count++
+						}
+					}
+					channel.ChannelInfo.MultiKeySize = count
+				}
+			}
 		}
 	}
 	err = channel.Update()

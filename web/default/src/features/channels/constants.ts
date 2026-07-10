@@ -197,6 +197,14 @@ export const ADD_MODE_OPTIONS = [
   },
 ] as const
 
+export const EDIT_MODE_OPTIONS = [
+  { value: 'single', label: 'Single Key' },
+  {
+    value: 'multi_to_single',
+    label: 'Multi-Key Mode (multiple keys, one channel)',
+  },
+] as const
+
 // ============================================================================
 // Multi-Key Management
 // ============================================================================
