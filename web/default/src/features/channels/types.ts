@@ -196,6 +196,7 @@ export type MultiKeyConfirmAction = {
     | 'enable-all'
     | 'disable-all'
     | 'delete-disabled'
+    | 'batch-verify'
   keyIndex?: number
 }
 
@@ -211,6 +212,7 @@ export interface MultiKeyStatusResponse {
     enabled_count: number
     manual_disabled_count: number
     auto_disabled_count: number
+    batch_verify_running?: boolean
   }
 }
 
@@ -273,6 +275,7 @@ export interface MultiKeyManageParams {
     | 'disable_all_keys'
     | 'delete_key'
     | 'delete_disabled_keys'
+    | 'batch_verify_keys'
   key_index?: number
   page?: number
   page_size?: number

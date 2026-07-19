@@ -1000,11 +1000,152 @@ func AutomaticallyTestChannels() {
 				common.SysLog(fmt.Sprintf("automatically test channels with interval %f minutes", frequency))
 				common.SysLog("automatically testing all channels")
 				_ = testAllChannels(false)
-				common.SysLog("automatically channel test finished")
-				if !operation_setting.GetMonitorSetting().AutoTestChannelEnabled {
-					break
-				}
+			common.SysLog("automatically channel test finished")
+			if !operation_setting.GetMonitorSetting().AutoTestChannelEnabled {
+				break
 			}
 		}
+	}
 	})
+}
+
+// batchVerifyRunning tracks channels currently running a multi-key batch verification.
+var batchVerifyRunning = make(map[int]bool)
+var batchVerifyLock sync.Mutex
+
+// IsBatchVerifyRunning reports whether a batch verification is in progress for the given channel.
+func IsBatchVerifyRunning(channelId int) bool {
+	batchVerifyLock.Lock()
+	defer batchVerifyLock.Unlock()
+	return batchVerifyRunning[channelId]
+}
+
+// startBatchVerifyMultiKeys marks a channel as running batch verification. Returns false if already running.
+func startBatchVerifyMultiKeys(channelId int) bool {
+	batchVerifyLock.Lock()
+	defer batchVerifyLock.Unlock()
+	if batchVerifyRunning[channelId] {
+		return false
+	}
+	batchVerifyRunning[channelId] = true
+	return true
+}
+
+func stopBatchVerifyMultiKeys(channelId int) {
+	batchVerifyLock.Lock()
+	defer batchVerifyLock.Unlock()
+	delete(batchVerifyRunning, channelId)
+}
+
+// RunBatchVerifyMultiKeys runs batch verification for all enabled and auto-disabled keys of a multi-key channel.
+// Manual-disabled keys are skipped. Up to 50 keys are tested concurrently per batch.
+// Keys whose test results match the disable rules are auto-disabled; auto-disabled keys that test OK are re-enabled.
+func RunBatchVerifyMultiKeys(channelId int) {
+	defer stopBatchVerifyMultiKeys(channelId)
+
+	channel, err := model.GetChannelById(channelId, true)
+	if err != nil {
+		common.SysError(fmt.Sprintf("batch verify multi-key: channel not found: %d, err=%v", channelId, err))
+		return
+	}
+	if !channel.ChannelInfo.IsMultiKey {
+		common.SysError(fmt.Sprintf("batch verify multi-key: channel is not multi-key: %d", channelId))
+		return
+	}
+
+	keys := channel.GetKeys()
+	if len(keys) == 0 {
+		common.SysLog(fmt.Sprintf("batch verify multi-key: channel_id=%d, no keys", channelId))
+		return
+	}
+
+	// Collect indexes of keys to verify (enabled or auto-disabled). Manual-disabled keys are skipped.
+	var toVerify []int
+	for i := range keys {
+		status := common.ChannelStatusEnabled
+		if channel.ChannelInfo.MultiKeyStatusList != nil {
+			if s, exists := channel.ChannelInfo.MultiKeyStatusList[i]; exists {
+				status = s
+			}
+		}
+		if status == common.ChannelStatusEnabled || status == common.ChannelStatusAutoDisabled {
+			toVerify = append(toVerify, i)
+		}
+	}
+
+	if len(toVerify) == 0 {
+		common.SysLog(fmt.Sprintf("batch verify multi-key: channel_id=%d, no keys to verify", channelId))
+		return
+	}
+
+	testUserID, err := resolveChannelTestUserID(nil)
+	if err != nil {
+		common.SysError(fmt.Sprintf("batch verify multi-key: failed to resolve test user: channel_id=%d, err=%v", channelId, err))
+		return
+	}
+
+	autoBan := channel.GetAutoBan()
+	common.SysLog(fmt.Sprintf("batch verify multi-key: channel_id=%d, testing %d keys", channelId, len(toVerify)))
+
+	const maxConcurrency = 50
+	batches := lo.Chunk(toVerify, maxConcurrency)
+
+	for _, batch := range batches {
+		var wg sync.WaitGroup
+		for _, idx := range batch {
+			wg.Add(1)
+			idxLocal := idx
+			gopool.Go(func() {
+				defer wg.Done()
+				verifySingleMultiKey(channelId, channel, idxLocal, keys[idxLocal], testUserID, autoBan)
+			})
+		}
+		wg.Wait()
+	}
+
+	common.SysLog(fmt.Sprintf("batch verify multi-key: channel_id=%d, finished", channelId))
+}
+
+// verifySingleMultiKey tests a single key of a multi-key channel by constructing a single-key channel
+// copy and reusing testChannel. Based on the result it updates the key status via UpdateChannelStatusWithAutoBan.
+func verifySingleMultiKey(channelId int, origChannel *model.Channel, keyIndex int, key string, testUserID int, autoBan bool) {
+	// Build a single-key copy: shallow copy the channel, disable multi-key mode, set the target key.
+	keyCopy := *origChannel
+	keyCopy.ChannelInfo.IsMultiKey = false
+	keyCopy.Key = key
+
+	result := testChannel(&keyCopy, testUserID, "", "", false)
+
+	// Read the current status of this key index from the original channel snapshot.
+	currentStatus := common.ChannelStatusEnabled
+	if origChannel.ChannelInfo.MultiKeyStatusList != nil {
+		if s, exists := origChannel.ChannelInfo.MultiKeyStatusList[keyIndex]; exists {
+			currentStatus = s
+		}
+	}
+
+	if result.localErr != nil && result.newAPIError == nil {
+		// Local error (e.g. unsupported channel type, config error) — don't change key status.
+		common.SysLog(fmt.Sprintf("batch verify: channel_id=%d, key_index=%d, local error: %v", channelId, keyIndex, result.localErr))
+		return
+	}
+
+	if result.newAPIError != nil && service.ShouldDisableChannel(result.newAPIError) {
+		reason := result.newAPIError.ErrorWithStatusCode()
+		changed := model.UpdateChannelStatusWithAutoBan(channelId, key, common.ChannelStatusAutoDisabled, reason, autoBan)
+		if changed {
+			common.SysLog(fmt.Sprintf("batch verify: channel_id=%d, key_index=%d, auto-disabled, reason=%s", channelId, keyIndex, reason))
+		}
+		return
+	}
+
+	// Test succeeded (newAPIError == nil). Re-enable if it was auto-disabled and the global enable switch is on.
+	if result.newAPIError == nil && currentStatus == common.ChannelStatusAutoDisabled {
+		if service.ShouldEnableChannel(nil, common.ChannelStatusAutoDisabled) {
+			changed := model.UpdateChannelStatusWithAutoBan(channelId, key, common.ChannelStatusEnabled, "", autoBan)
+			if changed {
+				common.SysLog(fmt.Sprintf("batch verify: channel_id=%d, key_index=%d, re-enabled (was auto-disabled)", channelId, keyIndex))
+			}
+		}
+	}
 }

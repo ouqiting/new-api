@@ -16,9 +16,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { Loader2, RefreshCw, Trash2, Power, PowerOff } from 'lucide-react'
+import { Loader2, RefreshCw, Trash2, Power, PowerOff, Activity } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -50,6 +50,7 @@ import {
   enableAllMultiKeys,
   disableAllMultiKeys,
   deleteDisabledMultiKeys,
+  batchVerifyMultiKeys,
 } from '../../api'
 import { MULTI_KEY_FILTER_OPTIONS } from '../../constants'
 import {
@@ -94,16 +95,9 @@ export function MultiKeyManageDialog({
   const [confirmAction, setConfirmAction] =
     useState<MultiKeyConfirmAction | null>(null)
   const [isPerformingAction, setIsPerformingAction] = useState(false)
-
-  // Reset and load data when dialog opens
-  useEffect(() => {
-    if (open && currentRow) {
-      setCurrentPage(1)
-      setStatusFilter(null)
-      loadKeyStatus(1, pageSize, null)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, currentRow?.id])
+  const [batchVerifyRunning, setBatchVerifyRunning] = useState(false)
+  const batchVerifyRunningRef = useRef(false)
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const loadKeyStatus = async (
     page: number = currentPage,
@@ -130,6 +124,9 @@ export function MultiKeyManageDialog({
         setEnabledCount(response.data.enabled_count || 0)
         setManualDisabledCount(response.data.manual_disabled_count || 0)
         setAutoDisabledCount(response.data.auto_disabled_count || 0)
+        const running = response.data.batch_verify_running ?? false
+        batchVerifyRunningRef.current = running
+        setBatchVerifyRunning(running)
       } else {
         toast.error(response.message || t('Failed to load key status'))
       }
@@ -141,6 +138,56 @@ export function MultiKeyManageDialog({
       setIsLoading(false)
     }
   }
+
+  // Reset and load data when dialog opens
+  useEffect(() => {
+    if (open && currentRow) {
+      setCurrentPage(1)
+      setStatusFilter(null)
+      loadKeyStatus(1, pageSize, null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, currentRow?.id])
+
+  // Cleanup polling on dialog close
+  useEffect(() => {
+    if (!open) {
+      if (pollTimerRef.current) {
+        clearTimeout(pollTimerRef.current)
+        pollTimerRef.current = null
+      }
+      batchVerifyRunningRef.current = false
+    }
+  }, [open])
+
+  useEffect(() => {
+    return () => {
+      if (pollTimerRef.current) {
+        clearTimeout(pollTimerRef.current)
+        pollTimerRef.current = null
+      }
+    }
+  }, [])
+
+  // Start/stop polling based on batchVerifyRunning flag
+  useEffect(() => {
+    if (batchVerifyRunning && open && currentRow) {
+      const poll = async () => {
+        if (!batchVerifyRunningRef.current) return
+        await loadKeyStatus(currentPage, pageSize)
+        if (!batchVerifyRunningRef.current) return
+        pollTimerRef.current = setTimeout(poll, 3000)
+      }
+      pollTimerRef.current = setTimeout(poll, 3000)
+    }
+    return () => {
+      if (pollTimerRef.current) {
+        clearTimeout(pollTimerRef.current)
+        pollTimerRef.current = null
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [batchVerifyRunning, open, currentRow?.id])
 
   const handleStatusFilterChange = (value: string) => {
     const newFilter = value === 'all' ? null : parseInt(value)
@@ -175,19 +222,28 @@ export function MultiKeyManageDialog({
         response = await disableAllMultiKeys(currentRow.id)
       } else if (type === 'delete-disabled') {
         response = await deleteDisabledMultiKeys(currentRow.id)
+      } else if (type === 'batch-verify') {
+        response = await batchVerifyMultiKeys(currentRow.id)
       }
 
       if (response?.success) {
         toast.success(response.message || t('Operation successful'))
         queryClient.invalidateQueries({ queryKey: channelsQueryKeys.lists() })
 
-        // Reload data - reset to page 1 for bulk actions
-        const isBulkAction = type.includes('all') || type === 'delete-disabled'
-        if (isBulkAction) {
-          setCurrentPage(1)
-          loadKeyStatus(1, pageSize)
-        } else {
+        if (type === 'batch-verify') {
+          // Batch verify runs async on the backend; start polling for updates.
+          batchVerifyRunningRef.current = true
+          setBatchVerifyRunning(true)
           loadKeyStatus(currentPage, pageSize)
+        } else {
+          // Reload data - reset to page 1 for bulk actions
+          const isBulkAction = type.includes('all') || type === 'delete-disabled'
+          if (isBulkAction) {
+            setCurrentPage(1)
+            loadKeyStatus(1, pageSize)
+          } else {
+            loadKeyStatus(currentPage, pageSize)
+          }
         }
       } else {
         toast.error(response?.message || t('Operation failed'))
@@ -313,6 +369,20 @@ export function MultiKeyManageDialog({
                 disabled={isLoading}
               >
                 <RefreshCw className='h-4 w-4' />
+              </Button>
+
+              <Button
+                variant='outline'
+                size='sm'
+                onClick={() => setConfirmAction({ type: 'batch-verify' })}
+                disabled={batchVerifyRunning || total === 0}
+              >
+                {batchVerifyRunning ? (
+                  <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+                ) : (
+                  <Activity className='mr-2 h-4 w-4' />
+                )}
+                {t('Batch Verify')}
               </Button>
 
               {manualDisabledCount + autoDisabledCount > 0 && (

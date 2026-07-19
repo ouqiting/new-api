@@ -532,6 +532,8 @@
     "Batch enable failed": "Batch enable failed",
     "Batch processing failed": "Batch processing failed",
     "Batch upstream model updates applied: {{channels}} channels, {{added}} added, {{removed}} removed, {{fails}} failed": "Batch upstream model updates applied: {{channels}} channels, {{added}} added, {{removed}} removed, {{fails}} failed",
+    "Batch Verify": "Batch Verify",
+    "Batch verify all enabled and auto-disabled keys? Manual-disabled keys will be skipped. Results will update automatically.": "Batch verify all enabled and auto-disabled keys? Manual-disabled keys will be skipped. Results will update automatically.",
     "Best for single-tenant deployments. Pricing and billing options stay hidden.": "Best for single-tenant deployments. Pricing and billing options stay hidden.",
     "Best TTFT": "Best TTFT",
     "Billable input tokens": "Billable input tokens",

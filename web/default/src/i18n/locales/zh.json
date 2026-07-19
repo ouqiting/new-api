@@ -532,6 +532,8 @@
     "Batch enable failed": "批量启用失败",
     "Batch processing failed": "批量处理失败",
     "Batch upstream model updates applied: {{channels}} channels, {{added}} added, {{removed}} removed, {{fails}} failed": "已批量处理上游模型更新：渠道 {{channels}} 个，加入 {{added}} 个，删除 {{removed}} 个，失败 {{fails}} 个",
+    "Batch Verify": "批量验活",
+    "Batch verify all enabled and auto-disabled keys? Manual-disabled keys will be skipped. Results will update automatically.": "批量验活所有启用和自动禁用的密钥？手动禁用的密钥将被跳过。结果将自动更新。",
     "Best for single-tenant deployments. Pricing and billing options stay hidden.": "适合单用户部署。定价和计费选项将被隐藏。",
     "Best TTFT": "最优 TTFT",
     "Billable input tokens": "计费输入 token",

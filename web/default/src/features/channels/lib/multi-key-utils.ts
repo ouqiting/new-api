@@ -55,6 +55,8 @@ export function getMultiKeyConfirmMessage(
       return MULTI_KEY_CONFIRM_MESSAGES.DISABLE_ALL
     case 'delete-disabled':
       return MULTI_KEY_CONFIRM_MESSAGES.DELETE_DISABLED
+    case 'batch-verify':
+      return MULTI_KEY_CONFIRM_MESSAGES.BATCH_VERIFY
     default:
       return ''
   }

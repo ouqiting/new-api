@@ -445,6 +445,19 @@ export async function deleteDisabledMultiKeys(
   }) as Promise<{ success: boolean; message?: string; data?: number }>
 }
 
+/**
+ * Batch verify all enabled and auto-disabled keys in a multi-key channel.
+ * Runs asynchronously on the backend; poll getMultiKeyStatus to observe progress.
+ */
+export async function batchVerifyMultiKeys(
+  channelId: number
+): Promise<{ success: boolean; message?: string }> {
+  return manageMultiKeys({
+    channel_id: channelId,
+    action: 'batch_verify_keys',
+  }) as Promise<{ success: boolean; message?: string }>
+}
+
 // ============================================================================
 // Tag Operations
 // ============================================================================

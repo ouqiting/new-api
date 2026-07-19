@@ -18,6 +18,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel/ollama"
 	"github.com/QuantumNous/new-api/service"
 
+	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -1356,7 +1357,7 @@ func CopyChannel(c *gin.Context) {
 // MultiKeyManageRequest represents the request for multi-key management operations
 type MultiKeyManageRequest struct {
 	ChannelId int    `json:"channel_id"`
-	Action    string `json:"action"`              // "disable_key", "enable_key", "delete_key", "delete_disabled_keys", "get_key_status"
+	Action    string `json:"action"`              // "disable_key", "enable_key", "delete_key", "delete_disabled_keys", "get_key_status", "batch_verify_keys"
 	KeyIndex  *int   `json:"key_index,omitempty"` // for disable_key, enable_key, and delete_key actions
 	Page      int    `json:"page,omitempty"`      // for get_key_status pagination
 	PageSize  int    `json:"page_size,omitempty"` // for get_key_status pagination
@@ -1374,6 +1375,8 @@ type MultiKeyStatusResponse struct {
 	EnabledCount        int `json:"enabled_count"`
 	ManualDisabledCount int `json:"manual_disabled_count"`
 	AutoDisabledCount   int `json:"auto_disabled_count"`
+	// BatchVerifyRunning indicates whether a batch verification is in progress for this channel.
+	BatchVerifyRunning bool `json:"batch_verify_running"`
 }
 
 type KeyStatus struct {
@@ -1543,6 +1546,7 @@ func ManageMultiKeys(c *gin.Context) {
 				EnabledCount:        enabledCount,        // Overall statistics
 				ManualDisabledCount: manualDisabledCount, // Overall statistics
 				AutoDisabledCount:   autoDisabledCount,   // Overall statistics
+				BatchVerifyRunning:  IsBatchVerifyRunning(channel.Id),
 			},
 		})
 		return
@@ -1859,6 +1863,25 @@ func ManageMultiKeys(c *gin.Context) {
 			"success": true,
 			"message": fmt.Sprintf("已删除 %d 个自动禁用的密钥", deletedCount),
 			"data":    deletedCount,
+		})
+		return
+
+	case "batch_verify_keys":
+		// Async: start background batch verification for all enabled and auto-disabled keys.
+		// Manual-disabled keys are skipped. Results are reflected in subsequent get_key_status polls.
+		if !startBatchVerifyMultiKeys(channel.Id) {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "该渠道正在批量验活中，请稍后再试",
+			})
+			return
+		}
+		gopool.Go(func() {
+			RunBatchVerifyMultiKeys(channel.Id)
+		})
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"message": "批量验活已开始，请稍后刷新查看结果",
 		})
 		return
 
