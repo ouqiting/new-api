@@ -358,7 +358,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 		processChannelError(c, channelError, newAPIError)
 		if exhaustedMultiKeys {
-			break
+			logger.LogDebug(c, "multi-key exhausted for channel #%d, falling back to other channels", channel.Id)
 		}
 
 		if !shouldRetry(c, newAPIError, common.RetryTimes-retryParam.GetRetry()) {
@@ -549,7 +549,9 @@ func processChannelError(c *gin.Context, channelError types.ChannelError, err *t
 	if isMultiKey {
 		model.ReleaseMultiKeyFillFirstKey(channelError.ChannelId, usingKey)
 	}
-	if service.ShouldDisableChannel(err) && channelError.AutoBan {
+	if isMultiKey && service.ShouldDisableChannel(err) {
+		model.UpdateChannelStatusWithAutoBan(channelError.ChannelId, usingKey, common.ChannelStatusAutoDisabled, err.ErrorWithStatusCode(), channelError.AutoBan)
+	} else if service.ShouldDisableChannel(err) && channelError.AutoBan {
 		gopool.Go(func() {
 			service.DisableChannel(channelError, err.ErrorWithStatusCode())
 		})

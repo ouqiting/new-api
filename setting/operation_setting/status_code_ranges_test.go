@@ -80,6 +80,12 @@ func TestShouldRetryByStatusCode_DefaultMatchesLegacyBehavior(t *testing.T) {
 	require.True(t, ShouldRetryByStatusCode(599))
 }
 
+func TestShouldDisableByStatusCode_DefaultIncludes401And402(t *testing.T) {
+	require.True(t, ShouldDisableByStatusCode(401))
+	require.True(t, ShouldDisableByStatusCode(402))
+	require.False(t, ShouldDisableByStatusCode(403))
+}
+
 func TestIsAlwaysSkipRetryStatusCode(t *testing.T) {
 	require.True(t, IsAlwaysSkipRetryStatusCode(504))
 	require.True(t, IsAlwaysSkipRetryStatusCode(524))

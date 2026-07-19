@@ -677,7 +677,7 @@ func CleanupChannelPollingLocks() {
 	})
 }
 
-func handlerMultiKeyUpdate(channel *Channel, usingKey string, status int, reason string) {
+func handlerMultiKeyUpdate(channel *Channel, usingKey string, status int, reason string, autoBan bool) {
 	keys := channel.GetKeys()
 	if len(keys) == 0 {
 		channel.Status = status
@@ -721,11 +721,13 @@ func handlerMultiKeyUpdate(channel *Channel, usingKey string, status int, reason
 			channel.ChannelInfo.MultiKeyDisabledTime[keyIndex] = common.GetTimestamp()
 		}
 		if !hasEnabledMultiKey(keys, channel.ChannelInfo.MultiKeyStatusList) {
-			channel.Status = common.ChannelStatusAutoDisabled
-			info := channel.GetOtherInfo()
-			info["status_reason"] = "All keys are disabled"
-			info["status_time"] = common.GetTimestamp()
-			channel.SetOtherInfo(info)
+			if autoBan {
+				channel.Status = common.ChannelStatusAutoDisabled
+				info := channel.GetOtherInfo()
+				info["status_reason"] = "All keys are disabled"
+				info["status_time"] = common.GetTimestamp()
+				channel.SetOtherInfo(info)
+			}
 		} else if status == common.ChannelStatusEnabled {
 			channel.Status = common.ChannelStatusEnabled
 		}
@@ -919,6 +921,10 @@ func hasEnabledMultiKey(keys []string, statusList map[int]int) bool {
 }
 
 func UpdateChannelStatus(channelId int, usingKey string, status int, reason string) bool {
+	return UpdateChannelStatusWithAutoBan(channelId, usingKey, status, reason, true)
+}
+
+func UpdateChannelStatusWithAutoBan(channelId int, usingKey string, status int, reason string, autoBan bool) bool {
 	if common.MemoryCacheEnabled {
 		channelStatusLock.Lock()
 		defer channelStatusLock.Unlock()
@@ -933,7 +939,7 @@ func UpdateChannelStatus(channelId int, usingKey string, status int, reason stri
 			pollingLock := GetChannelPollingLock(channelId)
 			pollingLock.Lock()
 			// 如果是多Key模式，更新缓存中的状态
-			handlerMultiKeyUpdate(channelCache, usingKey, status, reason)
+			handlerMultiKeyUpdate(channelCache, usingKey, status, reason, autoBan)
 			pollingLock.Unlock()
 			if beforeStatus != channelCache.Status {
 				CacheUpdateChannelStatus(channelId, channelCache.Status)
@@ -971,7 +977,7 @@ func UpdateChannelStatus(channelId int, usingKey string, status int, reason stri
 			// Protect map writes with the same per-channel lock used by readers
 			pollingLock := GetChannelPollingLock(channelId)
 			pollingLock.Lock()
-			handlerMultiKeyUpdate(channel, usingKey, status, reason)
+			handlerMultiKeyUpdate(channel, usingKey, status, reason, autoBan)
 			pollingLock.Unlock()
 			if beforeStatus != channel.Status {
 				shouldUpdateAbilities = true

@@ -5,6 +5,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -160,4 +161,71 @@ func TestSwitchMultiKeyPollingUsesNextRequestKey(t *testing.T) {
 	_, _, switched, exhausted = SwitchMultiKeyKey(channel.Id, "key-c", 2, tried)
 	require.False(t, switched)
 	require.True(t, exhausted)
+}
+
+func TestHandlerMultiKeyUpdateAutoBanDisablesChannelWhenAllKeysInvalid(t *testing.T) {
+	channel := &Channel{
+		Id:     987658,
+		Key:    "key-a\nkey-b",
+		Status: common.ChannelStatusEnabled,
+		ChannelInfo: ChannelInfo{
+			IsMultiKey:   true,
+			MultiKeyMode: constant.MultiKeyModeFillFirst,
+		},
+	}
+
+	handlerMultiKeyUpdate(channel, "key-a", common.ChannelStatusAutoDisabled, "auth error", true)
+	require.Equal(t, common.ChannelStatusEnabled, channel.Status)
+	require.Equal(t, common.ChannelStatusAutoDisabled, channel.ChannelInfo.MultiKeyStatusList[0])
+
+	handlerMultiKeyUpdate(channel, "key-b", common.ChannelStatusAutoDisabled, "auth error", true)
+	require.Equal(t, common.ChannelStatusAutoDisabled, channel.Status)
+	require.Equal(t, common.ChannelStatusAutoDisabled, channel.ChannelInfo.MultiKeyStatusList[1])
+}
+
+func TestHandlerMultiKeyUpdateAutoBanFalseKeepsChannelEnabledWhenAllKeysInvalid(t *testing.T) {
+	channel := &Channel{
+		Id:     987659,
+		Key:    "key-a\nkey-b",
+		Status: common.ChannelStatusEnabled,
+		ChannelInfo: ChannelInfo{
+			IsMultiKey:   true,
+			MultiKeyMode: constant.MultiKeyModeFillFirst,
+		},
+	}
+
+	handlerMultiKeyUpdate(channel, "key-a", common.ChannelStatusAutoDisabled, "auth error", false)
+	require.Equal(t, common.ChannelStatusEnabled, channel.Status)
+	require.Equal(t, common.ChannelStatusAutoDisabled, channel.ChannelInfo.MultiKeyStatusList[0])
+
+	handlerMultiKeyUpdate(channel, "key-b", common.ChannelStatusAutoDisabled, "auth error", false)
+	require.Equal(t, common.ChannelStatusEnabled, channel.Status)
+	require.Equal(t, common.ChannelStatusAutoDisabled, channel.ChannelInfo.MultiKeyStatusList[0])
+	require.Equal(t, common.ChannelStatusAutoDisabled, channel.ChannelInfo.MultiKeyStatusList[1])
+
+	_, _, apiErr := channel.GetNextEnabledKey()
+	require.NotNil(t, apiErr)
+	require.Equal(t, types.ErrorCodeChannelNoAvailableKey, apiErr.GetErrorCode())
+}
+
+func TestHandlerMultiKeyUpdateEnableKeyRestoresChannelStatus(t *testing.T) {
+	channel := &Channel{
+		Id:  987660,
+		Key: "key-a\nkey-b",
+		ChannelInfo: ChannelInfo{
+			IsMultiKey:     true,
+			MultiKeyMode:   constant.MultiKeyModeFillFirst,
+			MultiKeyStatusList: map[int]int{
+				0: common.ChannelStatusAutoDisabled,
+				1: common.ChannelStatusAutoDisabled,
+			},
+		},
+	}
+	channel.Status = common.ChannelStatusAutoDisabled
+
+	handlerMultiKeyUpdate(channel, "key-a", common.ChannelStatusEnabled, "", false)
+	require.Equal(t, common.ChannelStatusEnabled, channel.Status)
+	_, ok := channel.ChannelInfo.MultiKeyStatusList[0]
+	require.False(t, ok)
+	require.Equal(t, common.ChannelStatusAutoDisabled, channel.ChannelInfo.MultiKeyStatusList[1])
 }

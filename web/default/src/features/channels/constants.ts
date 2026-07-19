@@ -369,7 +369,7 @@ export const FIELD_DESCRIPTIONS = {
   PRIORITY: 'Higher priority channels are selected first',
   WEIGHT: 'Used for load balancing. Higher weight = more requests',
   TEST_MODEL: 'Model to use when testing channel connectivity',
-  AUTO_BAN: 'Automatically disable channel on repeated failures',
+  AUTO_BAN: 'Automatically disable channel when all keys are invalid',
   STATUS_CODE_MAPPING: 'Map response status codes (JSON format)',
   TAG: 'Group channels by tag for batch operations',
   REMARK: 'Internal notes (not shown to users)',
