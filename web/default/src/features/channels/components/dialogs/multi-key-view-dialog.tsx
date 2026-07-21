@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useState, useEffect, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { Loader2, RefreshCw, Copy, Check, Power, PowerOff, Trash2 } from 'lucide-react'
+import { Loader2, RefreshCw, Copy, Check, Power, PowerOff, Trash2, Braces } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -216,6 +216,24 @@ export function MultiKeyViewDialog(props: MultiKeyViewDialogProps) {
             >
               <Copy className='h-4 w-4' />
               {t('Copy All')}
+            </Button>
+            <Button
+              variant='outline'
+              size='sm'
+              onClick={() =>
+                handleCopy(
+                  JSON.stringify(
+                    { api_keys: rows.map((r) => r.key) },
+                    null,
+                    2
+                  ),
+                  -2
+                )
+              }
+              disabled={rows.length === 0}
+            >
+              <Braces className='h-4 w-4' />
+              {t('Copy as JSON')}
             </Button>
             <Button
               variant='outline'

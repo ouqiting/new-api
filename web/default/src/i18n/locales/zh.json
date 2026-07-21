@@ -943,6 +943,7 @@
     "Copy {{name}} pricing": "复制 {{name}} 定价",
     "Copy a request header": "复制请求头",
     "Copy All": "全部复制",
+    "Copy as JSON": "复制为 JSON",
     "Copy all backup codes": "复制所有备份代码",
     "Copy All Codes": "复制所有代码",
     "Copy API key": "复制 API 密钥",

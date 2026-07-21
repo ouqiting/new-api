@@ -943,6 +943,7 @@
     "Copy {{name}} pricing": "Copy {{name}} pricing",
     "Copy a request header": "Copy a request header",
     "Copy All": "Copy All",
+    "Copy as JSON": "Copy as JSON",
     "Copy all backup codes": "Copy all backup codes",
     "Copy All Codes": "Copy All Codes",
     "Copy API key": "Copy API key",
