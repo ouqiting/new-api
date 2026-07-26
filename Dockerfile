@@ -23,7 +23,24 @@ WORKDIR /build
 ADD go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
 
-COPY . .
+# Copy only what the Go build needs, so frontend-only (or docs-only) changes
+# do not invalidate this layer. New top-level Go packages must be added here.
+COPY main.go VERSION ./
+COPY common/ ./common/
+COPY constant/ ./constant/
+COPY controller/ ./controller/
+COPY dto/ ./dto/
+COPY i18n/ ./i18n/
+COPY logger/ ./logger/
+COPY middleware/ ./middleware/
+COPY model/ ./model/
+COPY oauth/ ./oauth/
+COPY pkg/ ./pkg/
+COPY relay/ ./relay/
+COPY router/ ./router/
+COPY service/ ./service/
+COPY setting/ ./setting/
+COPY types/ ./types/
 COPY --from=builder /build/web/default/dist ./web/default/dist
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build go build -ldflags "-s -w -X 'github.com/QuantumNous/new-api/common.Version=$(cat VERSION)'" -o new-api
 
@@ -35,7 +52,7 @@ RUN apt-get update \
     && update-ca-certificates
 
 COPY --from=builder2 /build/new-api /
-COPY --from=builder2 /build/plugins /plugins
+COPY plugins /plugins
 COPY LICENSE NOTICE THIRD-PARTY-LICENSES.md /licenses/
 EXPOSE 3000
 WORKDIR /data

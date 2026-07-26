@@ -19,6 +19,7 @@ services:
   new-api:
     image: ouqiting/new-api:latest
     container_name: new-api
+    pull_policy: always # 每次 up 时自动拉取最新镜像 (Always pull the latest image on `docker compose up`)
     restart: always
     command: --log-dir /app/logs
     ports:
