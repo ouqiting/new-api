@@ -43,8 +43,20 @@ export async function finishPasskeyRegistration(
   return res.data
 }
 
-export async function deletePasskey(): Promise<ApiResponse> {
-  const res = await api.delete<ApiResponse>('/api/user/passkey')
+export async function deletePasskey(id?: number): Promise<ApiResponse> {
+  const url =
+    typeof id === 'number' ? `/api/user/passkey/${id}` : '/api/user/passkey'
+  const res = await api.delete<ApiResponse>(url)
+  return res.data
+}
+
+export async function renamePasskey(
+  id: number,
+  name: string
+): Promise<ApiResponse> {
+  const res = await api.put<ApiResponse>(`/api/user/passkey/${id}/name`, {
+    name,
+  })
   return res.data
 }
 

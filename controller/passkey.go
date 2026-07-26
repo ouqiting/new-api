@@ -1,10 +1,12 @@
 package controller
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -17,6 +19,9 @@ import (
 	"github.com/go-webauthn/webauthn/protocol"
 	webauthnlib "github.com/go-webauthn/webauthn/webauthn"
 )
+
+// maxPasskeysPerUser 单个用户可绑定的 Passkey 数量上限
+const maxPasskeysPerUser = 10
 
 func PasskeyRegisterBegin(c *gin.Context) {
 	if !system_setting.GetPasskeySettings().Enabled {
@@ -40,13 +45,14 @@ func PasskeyRegisterBegin(c *gin.Context) {
 		return
 	}
 
-	credential, err := model.GetPasskeyByUserID(user.Id)
-	if err != nil && !errors.Is(err, model.ErrPasskeyNotFound) {
+	credentials, err := model.GetPasskeysByUserID(user.Id)
+	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
-	if errors.Is(err, model.ErrPasskeyNotFound) {
-		credential = nil
+	if len(credentials) >= maxPasskeysPerUser {
+		common.ApiErrorMsg(c, fmt.Sprintf("最多只能绑定 %d 个 Passkey", maxPasskeysPerUser))
+		return
 	}
 
 	wa, err := passkeysvc.BuildWebAuthn(c.Request)
@@ -55,11 +61,14 @@ func PasskeyRegisterBegin(c *gin.Context) {
 		return
 	}
 
-	waUser := passkeysvc.NewWebAuthnUser(user, credential)
+	waUser := passkeysvc.NewWebAuthnUserWithCredentials(user, credentials)
 	var options []webauthnlib.RegistrationOption
-	if credential != nil {
-		descriptor := credential.ToWebAuthnCredential().Descriptor()
-		options = append(options, webauthnlib.WithExclusions([]protocol.CredentialDescriptor{descriptor}))
+	if len(credentials) > 0 {
+		descriptors := make([]protocol.CredentialDescriptor, 0, len(credentials))
+		for _, credential := range credentials {
+			descriptors = append(descriptors, credential.ToWebAuthnCredential().Descriptor())
+		}
+		options = append(options, webauthnlib.WithExclusions(descriptors))
 	}
 
 	creation, sessionData, err := wa.BeginRegistration(waUser, options...)
@@ -110,13 +119,14 @@ func PasskeyRegisterFinish(c *gin.Context) {
 		return
 	}
 
-	credentialRecord, err := model.GetPasskeyByUserID(user.Id)
-	if err != nil && !errors.Is(err, model.ErrPasskeyNotFound) {
+	credentialRecords, err := model.GetPasskeysByUserID(user.Id)
+	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
-	if errors.Is(err, model.ErrPasskeyNotFound) {
-		credentialRecord = nil
+	if len(credentialRecords) >= maxPasskeysPerUser {
+		common.ApiErrorMsg(c, fmt.Sprintf("最多只能绑定 %d 个 Passkey", maxPasskeysPerUser))
+		return
 	}
 
 	sessionData, err := passkeysvc.PopSessionData(c, passkeysvc.RegistrationSessionKey)
@@ -125,7 +135,7 @@ func PasskeyRegisterFinish(c *gin.Context) {
 		return
 	}
 
-	waUser := passkeysvc.NewWebAuthnUser(user, credentialRecord)
+	waUser := passkeysvc.NewWebAuthnUserWithCredentials(user, credentialRecords)
 	credential, err := wa.FinishRegistration(waUser, *sessionData, c.Request)
 	if err != nil {
 		common.ApiError(c, err)
@@ -137,8 +147,12 @@ func PasskeyRegisterFinish(c *gin.Context) {
 		common.ApiErrorMsg(c, "无法创建 Passkey 凭证")
 		return
 	}
+	passkeyCredential.Name = normalizePasskeyName(
+		c.Query("name"),
+		fmt.Sprintf("Passkey %d", len(credentialRecords)+1),
+	)
 
-	if err := model.UpsertPasskeyCredential(passkeyCredential); err != nil {
+	if err := model.CreatePasskeyCredential(passkeyCredential); err != nil {
 		common.ApiError(c, err)
 		return
 	}
@@ -163,14 +177,77 @@ func PasskeyDelete(c *gin.Context) {
 		return
 	}
 
-	if err := model.DeletePasskeyByUserID(user.Id); err != nil {
+	// 未指定 id 时删除全部凭证（兼容旧行为）
+	idStr := strings.TrimSpace(c.Param("id"))
+	if idStr == "" {
+		if err := model.DeletePasskeyByUserID(user.Id); err != nil {
+			common.ApiError(c, err)
+			return
+		}
+	} else {
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			common.ApiErrorMsg(c, "无效的 Passkey ID")
+			return
+		}
+		if err := model.DeletePasskeyByID(user.Id, id); err != nil {
+			if errors.Is(err, model.ErrPasskeyNotFound) {
+				common.ApiErrorMsg(c, "未找到该 Passkey")
+				return
+			}
+			common.ApiError(c, err)
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Passkey 已解绑",
+	})
+}
+
+func PasskeyRename(c *gin.Context) {
+	user, err := getSessionUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
+	}
+
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		common.ApiErrorMsg(c, "无效的 Passkey ID")
+		return
+	}
+
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.ApiErrorMsg(c, "无效的请求参数")
+		return
+	}
+
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		common.ApiErrorMsg(c, "请输入 Passkey 名称")
+		return
+	}
+
+	if err := model.UpdatePasskeyName(user.Id, id, normalizePasskeyName(name, name)); err != nil {
+		if errors.Is(err, model.ErrPasskeyNotFound) {
+			common.ApiErrorMsg(c, "未找到该 Passkey")
+			return
+		}
 		common.ApiError(c, err)
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
-		"message": "Passkey 已解绑",
+		"message": "Passkey 已重命名",
 	})
 }
 
@@ -184,25 +261,34 @@ func PasskeyStatus(c *gin.Context) {
 		return
 	}
 
-	credential, err := model.GetPasskeyByUserID(user.Id)
-	if errors.Is(err, model.ErrPasskeyNotFound) {
-		c.JSON(http.StatusOK, gin.H{
-			"success": true,
-			"message": "",
-			"data": gin.H{
-				"enabled": false,
-			},
-		})
-		return
-	}
+	credentials, err := model.GetPasskeysByUserID(user.Id)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
 
+	list := make([]gin.H, 0, len(credentials))
+	var lastUsedAt *time.Time
+	for _, credential := range credentials {
+		list = append(list, gin.H{
+			"id":              credential.ID,
+			"name":            credential.Name,
+			"last_used_at":    credential.LastUsedAt,
+			"created_at":      credential.CreatedAt,
+			"backup_eligible": credential.BackupEligible,
+			"backup_state":    credential.BackupState,
+		})
+		if credential.LastUsedAt != nil && (lastUsedAt == nil || credential.LastUsedAt.After(*lastUsedAt)) {
+			lastUsedAt = credential.LastUsedAt
+		}
+	}
+
 	data := gin.H{
-		"enabled":      true,
-		"last_used_at": credential.LastUsedAt,
+		"enabled":  len(credentials) > 0,
+		"passkeys": list,
+	}
+	if len(credentials) > 0 {
+		data["last_used_at"] = lastUsedAt
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -321,15 +407,16 @@ func PasskeyLoginFinish(c *gin.Context) {
 		return
 	}
 
-	// 更新凭证信息
-	updatedCredential := model.NewPasskeyCredentialFromWebAuthn(modelUser.Id, credential)
-	if updatedCredential == nil {
+	// 更新凭证信息（保留记录 ID 与名称，仅回写验证后的状态）
+	credentialRecord := userWrapper.PasskeyCredential()
+	if credentialRecord == nil {
 		common.ApiErrorMsg(c, "Passkey 凭证更新失败")
 		return
 	}
+	credentialRecord.ApplyValidatedCredential(credential)
 	now := time.Now()
-	updatedCredential.LastUsedAt = &now
-	if err := model.UpsertPasskeyCredential(updatedCredential); err != nil {
+	credentialRecord.LastUsedAt = &now
+	if err := model.UpdatePasskeyCredential(credentialRecord); err != nil {
 		common.ApiError(c, err)
 		return
 	}
@@ -356,15 +443,16 @@ func AdminResetPasskey(c *gin.Context) {
 		return
 	}
 
-	if _, err := model.GetPasskeyByUserID(user.Id); err != nil {
-		if errors.Is(err, model.ErrPasskeyNotFound) {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "该用户尚未绑定 Passkey",
-			})
-			return
-		}
+	credentials, err := model.GetPasskeysByUserID(user.Id)
+	if err != nil {
 		common.ApiError(c, err)
+		return
+	}
+	if len(credentials) == 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "该用户尚未绑定 Passkey",
+		})
 		return
 	}
 
@@ -397,8 +485,8 @@ func PasskeyVerifyBegin(c *gin.Context) {
 		return
 	}
 
-	credential, err := model.GetPasskeyByUserID(user.Id)
-	if err != nil {
+	credentials, err := model.GetPasskeysByUserID(user.Id)
+	if err != nil || len(credentials) == 0 {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": "该用户尚未绑定 Passkey",
@@ -412,7 +500,7 @@ func PasskeyVerifyBegin(c *gin.Context) {
 		return
 	}
 
-	waUser := passkeysvc.NewWebAuthnUser(user, credential)
+	waUser := passkeysvc.NewWebAuthnUserWithCredentials(user, credentials)
 	assertion, sessionData, err := wa.BeginLogin(waUser)
 	if err != nil {
 		common.ApiError(c, err)
@@ -457,8 +545,8 @@ func PasskeyVerifyFinish(c *gin.Context) {
 		return
 	}
 
-	credential, err := model.GetPasskeyByUserID(user.Id)
-	if err != nil {
+	credentials, err := model.GetPasskeysByUserID(user.Id)
+	if err != nil || len(credentials) == 0 {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": "该用户尚未绑定 Passkey",
@@ -472,19 +560,27 @@ func PasskeyVerifyFinish(c *gin.Context) {
 		return
 	}
 
-	waUser := passkeysvc.NewWebAuthnUser(user, credential)
-	_, err = wa.FinishLogin(waUser, *sessionData, c.Request)
+	waUser := passkeysvc.NewWebAuthnUserWithCredentials(user, credentials)
+	validated, err := wa.FinishLogin(waUser, *sessionData, c.Request)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
 
-	// 更新凭证的最后使用时间
-	now := time.Now()
-	credential.LastUsedAt = &now
-	if err := model.UpsertPasskeyCredential(credential); err != nil {
-		common.ApiError(c, err)
-		return
+	// 更新本次使用的凭证的最后使用时间
+	usedID := base64.StdEncoding.EncodeToString(validated.ID)
+	for _, credential := range credentials {
+		if credential.CredentialID != usedID {
+			continue
+		}
+		credential.ApplyValidatedCredential(validated)
+		now := time.Now()
+		credential.LastUsedAt = &now
+		if err := model.UpdatePasskeyCredential(credential); err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		break
 	}
 
 	session := sessions.Default(c)
@@ -545,20 +641,32 @@ func requirePasskeyDeleteVerification(c *gin.Context, userID int) bool {
 		return requireSecureVerificationMethod(c, secureVerificationMethod2FA)
 	}
 
-	_, err = model.GetPasskeyByUserID(userID)
+	credentials, err := model.GetPasskeysByUserID(userID)
 	if err != nil {
-		if errors.Is(err, model.ErrPasskeyNotFound) {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "该用户尚未绑定 Passkey",
-			})
-			return false
-		}
 		common.ApiError(c, err)
+		return false
+	}
+	if len(credentials) == 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "该用户尚未绑定 Passkey",
+		})
 		return false
 	}
 
 	return requireSecureVerificationMethod(c, secureVerificationMethodPasskey)
+}
+
+// normalizePasskeyName 清洗用户提供的凭证名称，为空时使用默认名称
+func normalizePasskeyName(name string, defaultName string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		name = defaultName
+	}
+	if runes := []rune(name); len(runes) > 64 {
+		name = string(runes[:64])
+	}
+	return name
 }
 
 func requireSecureVerificationMethod(c *gin.Context, method string) bool {

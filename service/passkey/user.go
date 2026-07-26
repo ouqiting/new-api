@@ -11,12 +11,22 @@ import (
 )
 
 type WebAuthnUser struct {
-	user       *model.User
-	credential *model.PasskeyCredential
+	user        *model.User
+	credentials []*model.PasskeyCredential
 }
 
-func NewWebAuthnUser(user *model.User, credential *model.PasskeyCredential) *WebAuthnUser {
-	return &WebAuthnUser{user: user, credential: credential}
+func NewWebAuthnUser(user *model.User, credentials ...*model.PasskeyCredential) *WebAuthnUser {
+	list := make([]*model.PasskeyCredential, 0, len(credentials))
+	for _, credential := range credentials {
+		if credential != nil {
+			list = append(list, credential)
+		}
+	}
+	return &WebAuthnUser{user: user, credentials: list}
+}
+
+func NewWebAuthnUserWithCredentials(user *model.User, credentials []*model.PasskeyCredential) *WebAuthnUser {
+	return NewWebAuthnUser(user, credentials...)
 }
 
 func (u *WebAuthnUser) WebAuthnID() []byte {
@@ -49,11 +59,14 @@ func (u *WebAuthnUser) WebAuthnDisplayName() string {
 }
 
 func (u *WebAuthnUser) WebAuthnCredentials() []webauthn.Credential {
-	if u == nil || u.credential == nil {
+	if u == nil || len(u.credentials) == 0 {
 		return nil
 	}
-	cred := u.credential.ToWebAuthnCredential()
-	return []webauthn.Credential{cred}
+	creds := make([]webauthn.Credential, 0, len(u.credentials))
+	for _, credential := range u.credentials {
+		creds = append(creds, credential.ToWebAuthnCredential())
+	}
+	return creds
 }
 
 func (u *WebAuthnUser) ModelUser() *model.User {
@@ -64,8 +77,15 @@ func (u *WebAuthnUser) ModelUser() *model.User {
 }
 
 func (u *WebAuthnUser) PasskeyCredential() *model.PasskeyCredential {
+	if u == nil || len(u.credentials) == 0 {
+		return nil
+	}
+	return u.credentials[0]
+}
+
+func (u *WebAuthnUser) PasskeyCredentials() []*model.PasskeyCredential {
 	if u == nil {
 		return nil
 	}
-	return u.credential
+	return u.credentials
 }

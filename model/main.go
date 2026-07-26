@@ -254,6 +254,8 @@ func migrateDB() error {
 	if err := migrateTokenModelLimitsToText(); err != nil {
 		return err
 	}
+	// Drop legacy unique index on passkey user_id (single -> multiple passkeys)
+	migratePasskeyUserIndex()
 
 	err := DB.AutoMigrate(
 		&Channel{},
