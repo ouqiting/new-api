@@ -404,6 +404,9 @@ func GetSelf(c *gin.Context) {
 	// Hide admin remarks: set to empty to trigger omitempty tag, ensuring the remark field is not included in JSON returned to regular users
 	user.Remark = ""
 
+	// Migrate legacy remote avatar URLs (pre-local-storage) to local storage
+	service.MaybeMigrateRemoteAvatar(user.Id, user.AvatarUrl)
+
 	// 计算用户权限信息
 	permissions := calculateUserPermissions(userRole)
 

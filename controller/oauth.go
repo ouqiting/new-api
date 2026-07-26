@@ -11,6 +11,8 @@ import (
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/oauth"
+	"github.com/QuantumNous/new-api/service"
+	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -140,11 +142,14 @@ func HandleOAuth(c *gin.Context) {
 		return
 	}
 
-	// 9. Refresh avatar from provider (no-op for freshly registered users)
-	if oauthUser.AvatarURL != "" && oauthUser.AvatarURL != user.AvatarUrl {
-		if err := user.UpdateAvatarUrl(oauthUser.AvatarURL); err != nil {
-			common.SysError(fmt.Sprintf("[OAuth] Failed to update avatar for user %d: %s", user.Id, err.Error()))
-		}
+	// 9. Sync avatar from provider: download and store locally so clients
+	// never hot-link provider CDNs (skips the download when unchanged)
+	if oauthUser.AvatarURL != "" {
+		userId := user.Id
+		avatarURL := oauthUser.AvatarURL
+		gopool.Go(func() {
+			service.SyncOAuthAvatar(userId, avatarURL)
+		})
 	}
 
 	// 10. Setup login
@@ -205,22 +210,23 @@ func handleOAuthBind(c *gin.Context, provider oauth.Provider) {
 			common.ApiError(c, err)
 			return
 		}
-		if oauthUser.AvatarURL != "" && oauthUser.AvatarURL != user.AvatarUrl {
-			if err := user.UpdateAvatarUrl(oauthUser.AvatarURL); err != nil {
-				common.SysError(fmt.Sprintf("[OAuth] Failed to update avatar for user %d: %s", user.Id, err.Error()))
-			}
-		}
 	} else {
 		// Built-in provider: update user record directly
 		provider.SetProviderUserID(&user, oauthUser.ProviderUserID)
-		if oauthUser.AvatarURL != "" {
-			user.AvatarUrl = oauthUser.AvatarURL
-		}
 		err = user.Update(false)
 		if err != nil {
 			common.ApiError(c, err)
 			return
 		}
+	}
+
+	// Download and store the provider avatar locally (async)
+	if oauthUser.AvatarURL != "" {
+		userId := user.Id
+		avatarURL := oauthUser.AvatarURL
+		gopool.Go(func() {
+			service.SyncOAuthAvatar(userId, avatarURL)
+		})
 	}
 
 	common.ApiSuccessI18n(c, i18n.MsgOAuthBindSuccess, gin.H{
@@ -292,7 +298,8 @@ func findOrCreateOAuthUser(c *gin.Context, provider oauth.Provider, oauthUser *o
 	if oauthUser.Email != "" {
 		user.Email = oauthUser.Email
 	}
-	user.AvatarUrl = oauthUser.AvatarURL
+	// AvatarUrl is intentionally left empty here: SyncOAuthAvatar fills it
+	// with a site-local path after downloading the provider image
 	user.Role = common.RoleCommonUser
 	user.Status = common.UserStatusEnabled
 

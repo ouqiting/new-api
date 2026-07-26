@@ -327,6 +327,9 @@ func HardDeleteUserById(id int) error {
 		return errors.New("id 为空！")
 	}
 	err := DB.Unscoped().Delete(&User{}, "id = ?", id).Error
+	if err == nil {
+		DB.Where("user_id = ?", id).Delete(&UserAvatar{})
+	}
 	return err
 }
 
@@ -588,6 +591,9 @@ func (user *User) HardDelete() error {
 		return errors.New("id 为空！")
 	}
 	err := DB.Unscoped().Delete(user).Error
+	if err == nil {
+		DB.Where("user_id = ?", user.Id).Delete(&UserAvatar{})
+	}
 	return err
 }
 
@@ -646,14 +652,6 @@ func (user *User) UpdateGitHubId(newGitHubId string) error {
 		return errors.New("user id is empty")
 	}
 	return DB.Model(user).Update("github_id", newGitHubId).Error
-}
-
-func (user *User) UpdateAvatarUrl(avatarUrl string) error {
-	if user.Id == 0 {
-		return errors.New("user id is empty")
-	}
-	user.AvatarUrl = avatarUrl
-	return DB.Model(user).Update("avatar_url", avatarUrl).Error
 }
 
 func (user *User) FillUserByDiscordId() error {
