@@ -32,6 +32,7 @@ type linuxdoUser struct {
 	Active     bool   `json:"active"`
 	TrustLevel int    `json:"trust_level"`
 	Silenced   bool   `json:"silenced"`
+	AvatarUrl  string `json:"avatar_url"`
 }
 
 func (p *LinuxDOProvider) GetName() string {
@@ -159,6 +160,7 @@ func (p *LinuxDOProvider) GetUserInfo(ctx context.Context, token *OAuthToken) (*
 		ProviderUserID: strconv.Itoa(linuxdoUser.Id),
 		Username:       linuxdoUser.Username,
 		DisplayName:    linuxdoUser.Name,
+		AvatarURL:      linuxdoUser.AvatarUrl,
 		Extra: map[string]any{
 			"trust_level": linuxdoUser.TrustLevel,
 			"active":      linuxdoUser.Active,

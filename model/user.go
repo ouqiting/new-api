@@ -48,6 +48,7 @@ type User struct {
 	InviterId        int            `json:"inviter_id" gorm:"type:int;column:inviter_id;index"`
 	DeletedAt        gorm.DeletedAt `gorm:"index"`
 	LinuxDOId        string         `json:"linux_do_id" gorm:"column:linux_do_id;index"`
+	AvatarUrl        string         `json:"avatar_url" gorm:"type:varchar(500);column:avatar_url"`
 	Setting          string         `json:"setting" gorm:"type:text;column:setting"`
 	Remark           string         `json:"remark,omitempty" gorm:"type:varchar(255)" validate:"max=255"`
 	StripeCustomer   string         `json:"stripe_customer" gorm:"type:varchar(64);column:stripe_customer;index"`
@@ -645,6 +646,14 @@ func (user *User) UpdateGitHubId(newGitHubId string) error {
 		return errors.New("user id is empty")
 	}
 	return DB.Model(user).Update("github_id", newGitHubId).Error
+}
+
+func (user *User) UpdateAvatarUrl(avatarUrl string) error {
+	if user.Id == 0 {
+		return errors.New("user id is empty")
+	}
+	user.AvatarUrl = avatarUrl
+	return DB.Model(user).Update("avatar_url", avatarUrl).Error
 }
 
 func (user *User) FillUserByDiscordId() error {

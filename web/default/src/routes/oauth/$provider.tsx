@@ -170,9 +170,13 @@ function OAuthCallback() {
         const res = await api.get(`/api/oauth/${provider}`, config)
         if (res?.data?.success) {
           const { message } = res.data
-          const loginUser = (res.data?.data ?? null) as AuthUser | null
-          // Check if this is a bind operation
-          if (message === 'bind') {
+          const payload = (res.data?.data ?? null) as
+            | (AuthUser & { action?: string })
+            | null
+          const loginUser = payload
+          // Check if this is a bind operation (backend marks it via
+          // data.action; legacy handlers returned message === 'bind')
+          if (payload?.action === 'bind' || message === 'bind') {
             toast.success(i18next.t('Binding successful!'))
             notifyBindingResult('success')
             if (isBindingFlow) {
@@ -184,7 +188,7 @@ function OAuthCallback() {
             return
           }
           // Otherwise it's a login, use payload user if available
-          if (loginUser) {
+          if (loginUser && loginUser.id != null) {
             useAuthStore.getState().auth.setUser(loginUser)
             try {
               if (typeof window !== 'undefined' && loginUser.id != null) {

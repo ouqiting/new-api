@@ -35,9 +35,22 @@ type discordOAuthResponse struct {
 }
 
 type discordUser struct {
-	UID  string `json:"id"`
-	ID   string `json:"username"`
-	Name string `json:"global_name"`
+	UID    string `json:"id"`
+	ID     string `json:"username"`
+	Name   string `json:"global_name"`
+	Avatar string `json:"avatar"`
+}
+
+// AvatarURL builds the CDN URL for the user's avatar; empty if the user has no custom avatar
+func (u *discordUser) AvatarURL() string {
+	if u.Avatar == "" {
+		return ""
+	}
+	ext := "png"
+	if strings.HasPrefix(u.Avatar, "a_") {
+		ext = "gif"
+	}
+	return fmt.Sprintf("https://cdn.discordapp.com/avatars/%s/%s.%s?size=256", u.UID, u.Avatar, ext)
 }
 
 type discordGuildMember struct {
@@ -161,6 +174,7 @@ func (p *DiscordProvider) GetUserInfo(ctx context.Context, token *OAuthToken) (*
 		ProviderUserID: discordUser.UID,
 		Username:       discordUser.ID,
 		DisplayName:    discordUser.Name,
+		AvatarURL:      discordUser.AvatarURL(),
 	}, nil
 }
 

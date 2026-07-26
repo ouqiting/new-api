@@ -20,7 +20,7 @@ import { Activity, BarChart3, WalletCards } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { formatCompactNumber, formatQuota } from '@/lib/format'
 import { getRoleLabel } from '@/lib/roles'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Skeleton } from '@/components/ui/skeleton'
 import { StatusBadge } from '@/components/status-badge'
 import { getUserInitials, getDisplayName } from '../lib'
@@ -103,6 +103,13 @@ export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
       <div className='p-3 sm:p-5'>
         <div className='flex items-center gap-3 text-left sm:gap-4'>
           <Avatar className='ring-background h-12 w-12 rounded-xl text-sm ring-2 sm:h-16 sm:w-16 sm:rounded-2xl sm:text-lg sm:ring-4'>
+            {profile.avatar_url && (
+              <AvatarImage
+                src={profile.avatar_url}
+                alt={displayName}
+                className='rounded-xl sm:rounded-2xl'
+              />
+            )}
             <AvatarFallback className='bg-primary/10 text-primary rounded-xl sm:rounded-2xl'>
               {initials}
             </AvatarFallback>

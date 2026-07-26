@@ -3,7 +3,9 @@ package controller
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/i18n"
@@ -17,6 +19,20 @@ import (
 // providerParams returns map with Provider key for i18n templates
 func providerParams(name string) map[string]any {
 	return map[string]any{"Provider": name}
+}
+
+// sanitizeOAuthAvatarURL validates a provider-supplied avatar URL; it must be
+// http(s) and fit the avatar_url column, otherwise it is dropped.
+func sanitizeOAuthAvatarURL(rawURL string) string {
+	rawURL = strings.TrimSpace(rawURL)
+	if rawURL == "" || len(rawURL) > 500 {
+		return ""
+	}
+	parsed, err := url.Parse(rawURL)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+		return ""
+	}
+	return rawURL
 }
 
 // GenerateOAuthCode generates a state code for OAuth CSRF protection
@@ -102,6 +118,7 @@ func HandleOAuth(c *gin.Context) {
 		handleOAuthError(c, err)
 		return
 	}
+	oauthUser.AvatarURL = sanitizeOAuthAvatarURL(oauthUser.AvatarURL)
 
 	// 7. Find or create user
 	user, err := findOrCreateOAuthUser(c, provider, oauthUser, session)
@@ -123,7 +140,14 @@ func HandleOAuth(c *gin.Context) {
 		return
 	}
 
-	// 9. Setup login
+	// 9. Refresh avatar from provider (no-op for freshly registered users)
+	if oauthUser.AvatarURL != "" && oauthUser.AvatarURL != user.AvatarUrl {
+		if err := user.UpdateAvatarUrl(oauthUser.AvatarURL); err != nil {
+			common.SysError(fmt.Sprintf("[OAuth] Failed to update avatar for user %d: %s", user.Id, err.Error()))
+		}
+	}
+
+	// 10. Setup login
 	setupLogin(user, c)
 }
 
@@ -148,6 +172,7 @@ func handleOAuthBind(c *gin.Context, provider oauth.Provider) {
 		handleOAuthError(c, err)
 		return
 	}
+	oauthUser.AvatarURL = sanitizeOAuthAvatarURL(oauthUser.AvatarURL)
 
 	// Check if this OAuth account is already bound (check both new ID and legacy ID)
 	if provider.IsUserIDTaken(oauthUser.ProviderUserID) {
@@ -180,9 +205,17 @@ func handleOAuthBind(c *gin.Context, provider oauth.Provider) {
 			common.ApiError(c, err)
 			return
 		}
+		if oauthUser.AvatarURL != "" && oauthUser.AvatarURL != user.AvatarUrl {
+			if err := user.UpdateAvatarUrl(oauthUser.AvatarURL); err != nil {
+				common.SysError(fmt.Sprintf("[OAuth] Failed to update avatar for user %d: %s", user.Id, err.Error()))
+			}
+		}
 	} else {
 		// Built-in provider: update user record directly
 		provider.SetProviderUserID(&user, oauthUser.ProviderUserID)
+		if oauthUser.AvatarURL != "" {
+			user.AvatarUrl = oauthUser.AvatarURL
+		}
 		err = user.Update(false)
 		if err != nil {
 			common.ApiError(c, err)
@@ -259,6 +292,7 @@ func findOrCreateOAuthUser(c *gin.Context, provider oauth.Provider, oauthUser *o
 	if oauthUser.Email != "" {
 		user.Email = oauthUser.Email
 	}
+	user.AvatarUrl = oauthUser.AvatarURL
 	user.Role = common.RoleCommonUser
 	user.Status = common.UserStatusEnabled
 

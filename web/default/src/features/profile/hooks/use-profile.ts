@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useState, useEffect, useCallback } from 'react'
 import i18next from 'i18next'
 import { toast } from 'sonner'
+import { useAuthStore } from '@/stores/auth-store'
 import { getUserProfile, updateUserProfile, updateUserSettings } from '../api'
 import type {
   UserProfile,
@@ -45,6 +46,11 @@ export function useProfile() {
 
       if (response.success && response.data) {
         setProfile(response.data)
+        // Keep the header avatar in sync (e.g. right after an OAuth bind)
+        const { user, setUser } = useAuthStore.getState().auth
+        if (user && user.avatar_url !== response.data.avatar_url) {
+          setUser({ ...user, avatar_url: response.data.avatar_url })
+        }
       }
     } catch (error) {
       // eslint-disable-next-line no-console
