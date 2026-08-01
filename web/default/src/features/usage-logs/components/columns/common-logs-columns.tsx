@@ -337,6 +337,12 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
             : `#${log.channel}`
           const channelIdDisplay = `#${log.channel}`
           const channelName = sensitiveVisible ? log.channel_name : '••••'
+          const isMultiKey = other?.admin_info?.is_multi_key
+          const multiKeyIndex = other?.admin_info?.multi_key_index
+          const channelNameWithIndex =
+            isMultiKey && multiKeyIndex != null
+              ? `${channelName}(#${multiKeyIndex + 1})`
+              : channelName
 
           return (
             <TooltipProvider>
@@ -379,7 +385,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                   </div>
                   {log.channel_name && (
                     <span className='text-muted-foreground/70 truncate [font-family:var(--font-body)] !text-xs'>
-                      {channelName}
+                      {channelNameWithIndex}
                     </span>
                   )}
                 </TooltipTrigger>
