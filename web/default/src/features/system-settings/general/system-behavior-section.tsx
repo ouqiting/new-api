@@ -44,6 +44,7 @@ import { safeNumberFieldProps } from '../utils/numeric-field'
 
 const behaviorSchema = z.object({
   RetryTimes: z.coerce.number().min(0).max(10),
+  RetryExcludeCurrentChannel: z.boolean(),
   DefaultCollapseSidebar: z.boolean(),
   DemoSiteEnabled: z.boolean(),
   SelfUseModeEnabled: z.boolean(),
@@ -105,6 +106,29 @@ export function SystemBehaviorSection({
                 </FormDescription>
                 <FormMessage />
               </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name='RetryExcludeCurrentChannel'
+            render={({ field }) => (
+              <SettingsSwitchItem>
+                <SettingsSwitchContent>
+                  <FormLabel>
+                    {t('Exclude Current Channel on Retry')}
+                  </FormLabel>
+                  <FormDescription>
+                    {t('Do not use the channel that just failed when retrying')}
+                  </FormDescription>
+                </SettingsSwitchContent>
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+              </SettingsSwitchItem>
             )}
           />
 

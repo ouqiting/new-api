@@ -182,6 +182,7 @@ export const channelFormSchema = z
     pass_through_body_enabled: z.boolean().optional(),
     system_prompt: z.string().optional(),
     system_prompt_override: z.boolean().optional(),
+    response_timeout_seconds: z.number().min(0).optional(),
     // Type-specific settings (stored in settings JSON)
     is_enterprise_account: z.boolean().optional(), // OpenRouter specific
     vertex_key_type: z.enum(['json', 'api_key']).optional(), // Vertex AI specific
@@ -300,6 +301,7 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   pass_through_body_enabled: false,
   system_prompt: '',
   system_prompt_override: false,
+  response_timeout_seconds: 0,
   // Type-specific settings
   is_enterprise_account: false,
   vertex_key_type: 'json',
@@ -336,6 +338,7 @@ export function transformChannelToFormDefaults(
     pass_through_body_enabled: false,
     system_prompt: '',
     system_prompt_override: false,
+    response_timeout_seconds: 0,
   }
 
   if (channel.setting) {
@@ -348,6 +351,7 @@ export function transformChannelToFormDefaults(
         pass_through_body_enabled: parsed.pass_through_body_enabled || false,
         system_prompt: parsed.system_prompt || '',
         system_prompt_override: parsed.system_prompt_override || false,
+        response_timeout_seconds: parsed.response_timeout_seconds || 0,
       }
     } catch (error) {
       // eslint-disable-next-line no-console
@@ -459,6 +463,7 @@ function buildSettingJSON(formData: ChannelFormValues): string {
     pass_through_body_enabled: formData.pass_through_body_enabled || false,
     system_prompt: formData.system_prompt || '',
     system_prompt_override: formData.system_prompt_override || false,
+    response_timeout_seconds: formData.response_timeout_seconds || 0,
   }
   return JSON.stringify(settingObj)
 }

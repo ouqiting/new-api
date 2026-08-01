@@ -221,6 +221,7 @@ function hasAdvancedSettingsValues(values: ChannelFormValues): boolean {
     values.thinking_to_content ||
     values.pass_through_body_enabled ||
     values.system_prompt_override ||
+    values.response_timeout_seconds ||
     values.claude_beta_query ||
     values.upstream_model_update_check_enabled ||
     values.upstream_model_update_auto_sync_enabled ||
@@ -3316,6 +3317,35 @@ export function ChannelMutateDrawer({
                             <FormDescription>
                               {t(
                                 'Network proxy for this channel (supports socks5 protocol)'
+                              )}
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name='response_timeout_seconds'
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>
+                              {t('First Response Timeout (seconds)')}
+                            </FormLabel>
+                            <FormControl>
+                              <Input
+                                type='number'
+                                min='0'
+                                placeholder='0'
+                                {...field}
+                                onChange={(e) =>
+                                  field.onChange(Number(e.target.value))
+                                }
+                              />
+                            </FormControl>
+                            <FormDescription>
+                              {t(
+                                'Treat as an error and switch to another channel if no response within this many seconds. 0 disables this check.'
                               )}
                             </FormDescription>
                             <FormMessage />

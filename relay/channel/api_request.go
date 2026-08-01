@@ -523,6 +523,10 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 		return nil, errors.New("resp is nil")
 	}
 
+	if info.ChannelSetting.ResponseTimeoutSeconds > 0 {
+		resp.Body = helper.WrapFirstResponseTimeout(resp.Body, time.Duration(info.ChannelSetting.ResponseTimeoutSeconds)*time.Second)
+	}
+
 	if upID := resp.Header.Get(common2.RequestIdKey); upID != "" {
 		c.Set(common2.UpstreamRequestIdKey, upID)
 	}

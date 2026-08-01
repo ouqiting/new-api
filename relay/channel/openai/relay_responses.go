@@ -144,6 +144,10 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 		usage.PromptTokens = info.GetEstimatePromptTokens()
 	}
 
+	if info.StreamStatus.IsFirstResponseTimeout() {
+		return nil, helper.NewFirstResponseTimeoutError()
+	}
+
 	usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
 
 	return usage, nil

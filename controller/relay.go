@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -434,6 +435,16 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 			AutoBan: &autoBanInt,
 		}, nil
 	}
+	if common.RetryExcludeCurrentChannel {
+		usedChannels := c.GetStringSlice("use_channel")
+		if len(usedChannels) > 0 {
+			currentChannelId, err := strconv.Atoi(usedChannels[len(usedChannels)-1])
+			if err == nil {
+				retryParam.ExcludeChannels = map[int]bool{currentChannelId: true}
+			}
+		}
+	}
+
 	channel, selectGroup, err := service.CacheGetRandomSatisfiedChannel(retryParam)
 
 	info.PriceData.GroupRatioInfo = helper.HandleGroupRatio(c, info)

@@ -10,15 +10,16 @@ import (
 type StreamEndReason string
 
 const (
-	StreamEndReasonNone        StreamEndReason = ""
-	StreamEndReasonDone        StreamEndReason = "done"
-	StreamEndReasonTimeout     StreamEndReason = "timeout"
-	StreamEndReasonClientGone  StreamEndReason = "client_gone"
-	StreamEndReasonScannerErr  StreamEndReason = "scanner_error"
-	StreamEndReasonHandlerStop StreamEndReason = "handler_stop"
-	StreamEndReasonEOF         StreamEndReason = "eof"
-	StreamEndReasonPanic       StreamEndReason = "panic"
-	StreamEndReasonPingFail    StreamEndReason = "ping_fail"
+	StreamEndReasonNone                 StreamEndReason = ""
+	StreamEndReasonDone                 StreamEndReason = "done"
+	StreamEndReasonTimeout              StreamEndReason = "timeout"
+	StreamEndReasonFirstResponseTimeout StreamEndReason = "first_response_timeout"
+	StreamEndReasonClientGone           StreamEndReason = "client_gone"
+	StreamEndReasonScannerErr           StreamEndReason = "scanner_error"
+	StreamEndReasonHandlerStop          StreamEndReason = "handler_stop"
+	StreamEndReasonEOF                  StreamEndReason = "eof"
+	StreamEndReasonPanic                StreamEndReason = "panic"
+	StreamEndReasonPingFail             StreamEndReason = "ping_fail"
 )
 
 const maxStreamErrorEntries = 20
@@ -29,9 +30,9 @@ type StreamErrorEntry struct {
 }
 
 type StreamStatus struct {
-	EndReason  StreamEndReason
-	EndError   error
-	endOnce    sync.Once
+	EndReason StreamEndReason
+	EndError  error
+	endOnce   sync.Once
 
 	mu         sync.Mutex
 	Errors     []StreamErrorEntry
@@ -92,6 +93,15 @@ func (s *StreamStatus) IsNormalEnd() bool {
 	return s.EndReason == StreamEndReasonDone ||
 		s.EndReason == StreamEndReasonEOF ||
 		s.EndReason == StreamEndReasonHandlerStop
+}
+
+// IsFirstResponseTimeout reports whether the stream ended before the first
+// response byte/token was received because of a per-channel first-response timeout.
+func (s *StreamStatus) IsFirstResponseTimeout() bool {
+	if s == nil {
+		return false
+	}
+	return s.EndReason == StreamEndReasonFirstResponseTimeout
 }
 
 func (s *StreamStatus) Summary() string {
