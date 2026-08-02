@@ -229,3 +229,45 @@ func TestHandlerMultiKeyUpdateEnableKeyRestoresChannelStatus(t *testing.T) {
 	require.False(t, ok)
 	require.Equal(t, common.ChannelStatusAutoDisabled, channel.ChannelInfo.MultiKeyStatusList[1])
 }
+
+func TestUpdateChannelStatusWithAutoBanReenablesKeyWhenChannelOverallEnabled(t *testing.T) {
+	truncateTables(t)
+
+	// Exercise the DB path deterministically (no in-memory channel cache).
+	originalMemoryCacheEnabled := common.MemoryCacheEnabled
+	common.MemoryCacheEnabled = false
+	t.Cleanup(func() {
+		common.MemoryCacheEnabled = originalMemoryCacheEnabled
+	})
+
+	// Multi-key channel whose overall status is Enabled because key-b works,
+	// while key-a is auto-disabled. Re-enabling key-a must clear its status
+	// even though the overall channel status is already Enabled.
+	channel := &Channel{
+		Id:                987661,
+		Name:              "multikey-reeanble",
+		Key:               "key-a\nkey-b",
+		Type:              constant.ChannelTypeOpenAI,
+		Status:            common.ChannelStatusEnabled,
+		Models:            "gpt-4o-mini",
+		Group:             "default",
+		Weight:            common.GetPointer(uint(0)),
+		ChannelInfo:       ChannelInfo{
+			IsMultiKey:   true,
+			MultiKeyMode: constant.MultiKeyModeRandom,
+			MultiKeyStatusList: map[int]int{
+				0: common.ChannelStatusAutoDisabled,
+			},
+		},
+	}
+	require.NoError(t, DB.Create(channel).Error)
+
+	changed := UpdateChannelStatusWithAutoBan(channel.Id, "key-a", common.ChannelStatusEnabled, "", true)
+	require.True(t, changed)
+
+	reloaded, err := GetChannelById(channel.Id, true)
+	require.NoError(t, err)
+	_, ok := reloaded.ChannelInfo.MultiKeyStatusList[0]
+	require.False(t, ok, "auto-disabled key should be removed from the status list after re-enable")
+	require.Equal(t, common.ChannelStatusEnabled, reloaded.Status)
+}

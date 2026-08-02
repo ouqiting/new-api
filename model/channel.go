@@ -968,10 +968,6 @@ func UpdateChannelStatusWithAutoBan(channelId int, usingKey string, status int, 
 	if err != nil {
 		return false
 	} else {
-		if channel.Status == status {
-			return false
-		}
-
 		if channel.ChannelInfo.IsMultiKey {
 			beforeStatus := channel.Status
 			// Protect map writes with the same per-channel lock used by readers
@@ -983,6 +979,10 @@ func UpdateChannelStatusWithAutoBan(channelId int, usingKey string, status int, 
 				shouldUpdateAbilities = true
 			}
 		} else {
+			// 非多Key渠道，如果状态已是目标状态，直接返回
+			if channel.Status == status {
+				return false
+			}
 			info := channel.GetOtherInfo()
 			info["status_reason"] = reason
 			info["status_time"] = common.GetTimestamp()
