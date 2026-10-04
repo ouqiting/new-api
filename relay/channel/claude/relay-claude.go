@@ -625,6 +625,7 @@ type ClaudeResponseInfo struct {
 	ResponseText strings.Builder
 	Usage        *dto.Usage
 	Done         bool
+	HasToolUse   bool
 }
 
 func cacheCreationTokensForOpenAIUsage(usage *dto.Usage) int {
@@ -836,6 +837,12 @@ func HandleStreamResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 	if claudeResponse.Delta != nil && claudeResponse.Delta.StopReason != nil {
 		maybeMarkClaudeRefusal(c, *claudeResponse.Delta.StopReason)
 	}
+	if claudeResponse.ContentBlock != nil && strings.HasPrefix(claudeResponse.ContentBlock.Type, "tool_use") {
+		claudeInfo.HasToolUse = true
+	}
+	if claudeResponse.Delta != nil && claudeResponse.Delta.Type == "input_json_delta" {
+		claudeInfo.HasToolUse = true
+	}
 	if info.RelayFormat == types.RelayFormatClaude {
 		FormatClaudeResponseInfo(&claudeResponse, nil, claudeInfo)
 
@@ -924,6 +931,10 @@ func ClaudeStreamHandler(c *gin.Context, resp *http.Response, info *relaycommon.
 		return nil, err
 	}
 
+	if emptyErr := helper.HandleEmptyCompletion(c, info, claudeInfo.Usage, claudeInfo.ResponseText.Len() > 0 || claudeInfo.HasToolUse); emptyErr != nil {
+		return nil, emptyErr
+	}
+
 	HandleStreamFinalResponse(c, info, claudeInfo)
 	return claudeInfo.Usage, nil
 }
@@ -968,8 +979,36 @@ func HandleClaudeResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 		c.Set("claude_web_search_requests", claudeResponse.Usage.ServerToolUse.WebSearchRequests)
 	}
 
+	if emptyErr := helper.HandleEmptyCompletion(c, info, claudeInfo.Usage, claudeResponseHasOutput(&claudeResponse)); emptyErr != nil {
+		return emptyErr
+	}
+
 	service.IOCopyBytesGracefully(c, httpResp, responseData)
 	return nil
+}
+
+// claudeResponseHasOutput reports whether an Anthropic message carries actual
+// output: text, thinking, or tool use blocks.
+func claudeResponseHasOutput(claudeResponse *dto.ClaudeResponse) bool {
+	if claudeResponse == nil {
+		return false
+	}
+	if claudeResponse.Completion != "" {
+		return true
+	}
+	for i := range claudeResponse.Content {
+		block := &claudeResponse.Content[i]
+		if block.GetText() != "" {
+			return true
+		}
+		if block.Thinking != nil && *block.Thinking != "" {
+			return true
+		}
+		if block.Type == "tool_use" || block.Type == "server_tool_use" || block.Type == "mcp_tool_use" {
+			return true
+		}
+	}
+	return false
 }
 
 func ClaudeHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (*dto.Usage, *types.NewAPIError) {

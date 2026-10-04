@@ -71,6 +71,10 @@ func OaiResponsesToChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 		chatResp.Usage = *usage
 	}
 
+	if emptyErr := helper.HandleEmptyCompletion(c, info, usage, helper.HasChatCompletionsOutput(chatResp.Choices)); emptyErr != nil {
+		return nil, emptyErr
+	}
+
 	var responseBody []byte
 	switch info.RelayFormat {
 	case types.RelayFormatClaude:
@@ -521,6 +525,10 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 
 	if usage.TotalTokens == 0 {
 		usage = service.ResponseText2Usage(c, usageText.String(), info.UpstreamModelName, info.GetEstimatePromptTokens())
+	}
+
+	if emptyErr := helper.HandleEmptyCompletion(c, info, usage, usageText.Len() > 0 || sawToolCall); emptyErr != nil {
+		return nil, emptyErr
 	}
 
 	if !sentStart {

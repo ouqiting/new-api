@@ -176,6 +176,8 @@ export interface LogOtherData {
   fee_quota?: number
   // Reject / intercept reason (admin)
   reject_reason?: string
+  // Upstream produced no output (0 output tokens); request treated as failed
+  empty_completion?: boolean
   // Task-related fields (for refund logs, type=6)
   is_task?: boolean
   task_id?: string

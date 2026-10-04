@@ -126,11 +126,17 @@ func tencentStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *htt
 		common.SysLog("error reading stream: " + err.Error())
 	}
 
+	usage := service.ResponseText2Usage(c, responseText, info.UpstreamModelName, info.GetEstimatePromptTokens())
+	if emptyErr := helper.HandleEmptyCompletion(c, info, usage, responseText != ""); emptyErr != nil {
+		service.CloseResponseBodyGracefully(resp)
+		return nil, emptyErr
+	}
+
 	helper.Done(c)
 
 	service.CloseResponseBodyGracefully(resp)
 
-	return service.ResponseText2Usage(c, responseText, info.UpstreamModelName, info.GetEstimatePromptTokens()), nil
+	return usage, nil
 }
 
 func tencentHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.NewAPIError) {
@@ -154,6 +160,9 @@ func tencentHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Resp
 	jsonResponse, err := common.Marshal(fullTextResponse)
 	if err != nil {
 		return nil, types.NewError(err, types.ErrorCodeBadResponseBody)
+	}
+	if emptyErr := helper.HandleEmptyCompletion(c, info, &fullTextResponse.Usage, helper.HasChatCompletionsOutput(fullTextResponse.Choices)); emptyErr != nil {
+		return nil, emptyErr
 	}
 	c.Writer.Header().Set("Content-Type", "application/json")
 	c.Writer.WriteHeader(resp.StatusCode)

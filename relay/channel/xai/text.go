@@ -72,6 +72,10 @@ func xAIStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 		usage.CompletionTokens += toolCount * 7
 	}
 
+	if emptyErr := helper.HandleEmptyCompletion(c, info, usage, responseTextBuilder.Len() > 0 || toolCount > 0); emptyErr != nil {
+		return nil, emptyErr
+	}
+
 	helper.Done(c)
 	service.CloseResponseBodyGracefully(resp)
 	return usage, nil
@@ -98,6 +102,10 @@ func xAIHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response
 	encodeJson, err := common.Marshal(xaiResponse)
 	if err != nil {
 		return nil, types.NewError(err, types.ErrorCodeBadResponseBody)
+	}
+
+	if emptyErr := helper.HandleEmptyCompletion(c, info, xaiResponse.Usage, helper.HasChatCompletionsOutput(xaiResponse.Choices)); emptyErr != nil {
+		return nil, emptyErr
 	}
 
 	service.IOCopyBytesGracefully(c, resp, encodeJson)

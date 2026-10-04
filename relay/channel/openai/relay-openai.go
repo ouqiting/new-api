@@ -188,6 +188,10 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 		return nil, helper.NewFirstResponseTimeoutError()
 	}
 
+	if emptyErr := helper.HandleEmptyCompletion(c, info, usage, isAudioModel || responseTextBuilder.Len() > 0 || toolCount > 0); emptyErr != nil {
+		return nil, emptyErr
+	}
+
 	HandleFinalResponse(c, info, lastStreamData, responseId, createAt, model, systemFingerprint, usage, containStreamUsage)
 
 	return usage, nil
@@ -257,6 +261,10 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 	}
 
 	applyUsagePostProcessing(info, &simpleResponse.Usage, responseBody)
+
+	if emptyErr := helper.HandleEmptyCompletion(c, info, &simpleResponse.Usage, helper.HasChatCompletionsOutput(simpleResponse.Choices)); emptyErr != nil {
+		return nil, emptyErr
+	}
 
 	switch info.RelayFormat {
 	case types.RelayFormatOpenAI:

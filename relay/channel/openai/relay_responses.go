@@ -40,9 +40,6 @@ func OaiResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 		c.Set("image_generation_call_size", responsesResponse.GetSize())
 	}
 
-	// 写入新的 response body
-	service.IOCopyBytesGracefully(c, resp, responseBody)
-
 	// compute usage
 	usage := dto.Usage{}
 	if responsesResponse.Usage != nil {
@@ -53,6 +50,14 @@ func OaiResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 			usage.PromptTokensDetails.CachedTokens = responsesResponse.Usage.InputTokensDetails.CachedTokens
 		}
 	}
+
+	if emptyErr := helper.HandleEmptyCompletion(c, info, &usage, responsesHasOutput(&responsesResponse)); emptyErr != nil {
+		return nil, emptyErr
+	}
+
+	// 写入新的 response body
+	service.IOCopyBytesGracefully(c, resp, responseBody)
+
 	if info == nil || info.ResponsesUsageInfo == nil || info.ResponsesUsageInfo.BuiltInTools == nil {
 		return &usage, nil
 	}
@@ -78,6 +83,7 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 
 	var usage = &dto.Usage{}
 	var responseTextBuilder strings.Builder
+	var hasOutput bool
 
 	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
 
@@ -107,6 +113,7 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 					}
 				}
 				if streamResponse.Response.HasImageGenerationCall() {
+					hasOutput = true
 					c.Set("image_generation_call", true)
 					c.Set("image_generation_call_quality", streamResponse.Response.GetQuality())
 					c.Set("image_generation_call_size", streamResponse.Response.GetSize())
@@ -114,10 +121,16 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 			}
 		case "response.output_text.delta":
 			// 处理输出文本
+			if streamResponse.Delta != "" {
+				hasOutput = true
+			}
 			responseTextBuilder.WriteString(streamResponse.Delta)
 		case dto.ResponsesOutputTypeItemDone:
 			// 函数调用处理
 			if streamResponse.Item != nil {
+				if responsesOutputItemHasOutput(streamResponse.Item) {
+					hasOutput = true
+				}
 				switch streamResponse.Item.Type {
 				case dto.BuildInCallWebSearchCall:
 					if info != nil && info.ResponsesUsageInfo != nil && info.ResponsesUsageInfo.BuiltInTools != nil {
@@ -148,7 +161,48 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 		return nil, helper.NewFirstResponseTimeoutError()
 	}
 
+	if emptyErr := helper.HandleEmptyCompletion(c, info, usage, hasOutput); emptyErr != nil {
+		return nil, emptyErr
+	}
+
 	usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
 
 	return usage, nil
+}
+
+// responsesHasOutput reports whether a non-streaming Responses payload carries
+// actual output: message or reasoning text, tool call arguments, or built-in
+// tool / image generation activity.
+func responsesHasOutput(resp *dto.OpenAIResponsesResponse) bool {
+	if resp == nil {
+		return false
+	}
+	if resp.HasImageGenerationCall() {
+		return true
+	}
+	for i := range resp.Output {
+		if responsesOutputItemHasOutput(&resp.Output[i]) {
+			return true
+		}
+	}
+	return false
+}
+
+func responsesOutputItemHasOutput(item *dto.ResponsesOutput) bool {
+	if item == nil {
+		return false
+	}
+	if len(item.Arguments) > 0 {
+		return true
+	}
+	for _, content := range item.Content {
+		if content.Text != "" {
+			return true
+		}
+	}
+	switch item.Type {
+	case "", "message", "reasoning":
+		return false
+	}
+	return true
 }

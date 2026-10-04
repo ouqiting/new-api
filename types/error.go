@@ -43,14 +43,14 @@ const (
 	ErrorCodeViolationFeeGrokCSAM   ErrorCode = "violation_fee.grok.csam"
 
 	// new api error
-	ErrorCodeCountTokenFailed   ErrorCode = "count_token_failed"
-	ErrorCodeModelPriceError    ErrorCode = "model_price_error"
-	ErrorCodeInvalidApiType     ErrorCode = "invalid_api_type"
-	ErrorCodeJsonMarshalFailed  ErrorCode = "json_marshal_failed"
-	ErrorCodeDoRequestFailed    ErrorCode = "do_request_failed"
-	ErrorCodeGetChannelFailed   ErrorCode = "get_channel_failed"
-	ErrorCodeGenRelayInfoFailed ErrorCode = "gen_relay_info_failed"
-	ErrorCodePluginHookError    ErrorCode = "plugin_hook_error"
+	ErrorCodeCountTokenFailed    ErrorCode = "count_token_failed"
+	ErrorCodeModelPriceError     ErrorCode = "model_price_error"
+	ErrorCodeInvalidApiType      ErrorCode = "invalid_api_type"
+	ErrorCodeJsonMarshalFailed   ErrorCode = "json_marshal_failed"
+	ErrorCodeDoRequestFailed     ErrorCode = "do_request_failed"
+	ErrorCodeGetChannelFailed    ErrorCode = "get_channel_failed"
+	ErrorCodeGenRelayInfoFailed  ErrorCode = "gen_relay_info_failed"
+	ErrorCodePluginHookError     ErrorCode = "plugin_hook_error"
 	ErrorCodePluginRequestDenied ErrorCode = "plugin_request_denied"
 
 	// channel error
@@ -76,6 +76,7 @@ const (
 	ErrorCodeBadResponse            ErrorCode = "bad_response"
 	ErrorCodeBadResponseBody        ErrorCode = "bad_response_body"
 	ErrorCodeEmptyResponse          ErrorCode = "empty_response"
+	ErrorCodeEmptyCompletion        ErrorCode = "empty_completion"
 	ErrorCodeAwsInvokeError         ErrorCode = "aws_invoke_error"
 	ErrorCodeModelNotFound          ErrorCode = "model_not_found"
 	ErrorCodePromptBlocked          ErrorCode = "prompt_blocked"

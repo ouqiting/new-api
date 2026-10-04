@@ -1394,7 +1394,31 @@ func geminiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 		}
 	}
 
+	if emptyErr := helper.HandleEmptyCompletion(c, info, usage, imageCount > 0 || responseText.Len() > 0); emptyErr != nil {
+		return nil, emptyErr
+	}
+
 	return usage, nil
+}
+
+// geminiResponseHasOutput reports whether a Gemini payload carries actual
+// output: text, images, function calls or code execution results.
+func geminiResponseHasOutput(resp *dto.GeminiChatResponse) bool {
+	if resp == nil {
+		return false
+	}
+	for i := range resp.Candidates {
+		parts := resp.Candidates[i].Content.Parts
+		for j := range parts {
+			part := &parts[j]
+			if part.Text != "" ||
+				part.InlineData != nil || part.FunctionCall != nil ||
+				part.ExecutableCode != nil || part.CodeExecutionResult != nil {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func GeminiChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.NewAPIError) {
@@ -1519,10 +1543,11 @@ func GeminiChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.R
 		var newAPIError *types.NewAPIError
 		if geminiResponse.PromptFeedback != nil && geminiResponse.PromptFeedback.BlockReason != nil {
 			common.SetContextKey(c, constant.ContextKeyAdminRejectReason, fmt.Sprintf("gemini_block_reason=%s", *geminiResponse.PromptFeedback.BlockReason))
+			// 500 而不是 400：这是上游拦截导致的空回复，按失败处理并切换渠道重试
 			newAPIError = types.NewOpenAIError(
 				errors.New("request blocked by Gemini API: "+*geminiResponse.PromptFeedback.BlockReason),
 				types.ErrorCodePromptBlocked,
-				http.StatusBadRequest,
+				http.StatusInternalServerError,
 			)
 		} else {
 			common.SetContextKey(c, constant.ContextKeyAdminRejectReason, "gemini_empty_candidates")
@@ -1534,25 +1559,17 @@ func GeminiChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.R
 		}
 
 		service.ResetStatusCode(newAPIError, c.GetString("status_code_mapping"))
-
-		switch info.RelayFormat {
-		case types.RelayFormatClaude:
-			c.JSON(newAPIError.StatusCode, gin.H{
-				"type":  "error",
-				"error": newAPIError.ToClaudeError(),
-			})
-		default:
-			c.JSON(newAPIError.StatusCode, gin.H{
-				"error": newAPIError.ToOpenAIError(),
-			})
-		}
-		return &usage, nil
+		return &usage, newAPIError
 	}
 	fullTextResponse := responseGeminiChat2OpenAI(c, &geminiResponse)
 	fullTextResponse.Model = info.UpstreamModelName
 	usage := buildUsageFromGeminiMetadata(geminiResponse.UsageMetadata, info.GetEstimatePromptTokens())
 
 	fullTextResponse.Usage = usage
+
+	if emptyErr := helper.HandleEmptyCompletion(c, info, &usage, geminiResponseHasOutput(&geminiResponse)); emptyErr != nil {
+		return nil, emptyErr
+	}
 
 	switch info.RelayFormat {
 	case types.RelayFormatOpenAI:

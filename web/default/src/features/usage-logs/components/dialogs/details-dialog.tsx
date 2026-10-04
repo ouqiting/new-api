@@ -662,6 +662,21 @@ export function DetailsDialog(props: DetailsDialogProps) {
             </DetailSection>
           )}
 
+          {/* Empty completion (upstream returned no output; treated as failure) */}
+          {other?.empty_completion && (
+            <DetailSection
+              icon={<AlertTriangle className='size-3.5' aria-hidden='true' />}
+              label={t('Empty Reply')}
+              variant='danger'
+            >
+              <p className='text-xs break-words'>
+                {t(
+                  'The upstream produced no output (0 tokens). This request is treated as a failure and is not charged.'
+                )}
+              </p>
+            </DetailSection>
+          )}
+
           {/* Violation fee info */}
           {isViolation && other && (
             <DetailSection

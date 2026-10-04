@@ -289,6 +289,10 @@ func awsStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, a *Adaptor) (
 		}
 	}
 
+	if emptyErr := helper.HandleEmptyCompletion(c, info, claudeInfo.Usage, claudeInfo.ResponseText.Len() > 0 || claudeInfo.HasToolUse); emptyErr != nil {
+		return emptyErr, nil
+	}
+
 	claude.HandleStreamFinalResponse(c, info, claudeInfo)
 	return nil, claudeInfo.Usage
 }
