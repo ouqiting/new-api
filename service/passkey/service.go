@@ -80,30 +80,38 @@ func BuildWebAuthn(r *http.Request) (*webauthn.WebAuthn, error) {
 }
 
 func resolveOrigins(r *http.Request, settings *system_setting.PasskeySettings) ([]string, error) {
+	scheme := detectScheme(r)
+
 	originsStr := strings.TrimSpace(settings.Origins)
 	if originsStr != "" {
-		originList := strings.Split(originsStr, ",")
-		origins := make([]string, 0, len(originList))
-		for _, origin := range originList {
-			trimmed := strings.TrimSpace(origin)
-			if trimmed == "" {
+		// 未写协议的 Origin 按请求协议补全；不允许不安全来源时一律按 https 处理
+		defaultScheme := "https"
+		if scheme == "http" && (settings.AllowInsecureOrigin || isLoopbackHost(r.Host)) {
+			defaultScheme = "http"
+		}
+		entries := splitOriginEntries(originsStr)
+		origins := make([]string, 0, len(entries))
+		for _, entry := range entries {
+			origin, err := normalizeOrigin(entry, defaultScheme)
+			if err != nil {
+				return nil, err
+			}
+			if origin == "" {
 				continue
 			}
-			if !settings.AllowInsecureOrigin && strings.HasPrefix(strings.ToLower(trimmed), "http://") {
-				return nil, fmt.Errorf("Passkey 不允许使用不安全的 Origin: %s", trimmed)
+			if !settings.AllowInsecureOrigin && strings.HasPrefix(strings.ToLower(origin), "http://") {
+				return nil, fmt.Errorf("Passkey 不允许使用不安全的 Origin: %s", origin)
 			}
-			origins = append(origins, trimmed)
+			origins = append(origins, origin)
 		}
-		if len(origins) == 0 {
-			// 如果配置了Origins但过滤后为空，使用自动推导
-			goto autoDetect
+		if len(origins) > 0 {
+			return origins, nil
 		}
-		return origins, nil
+		// 配置了 Origins 但过滤后为空，回退到自动推导
 	}
 
-autoDetect:
-	scheme := detectScheme(r)
-	if scheme == "http" && !settings.AllowInsecureOrigin && r.Host != "localhost" && r.Host != "127.0.0.1" && !strings.HasPrefix(r.Host, "127.0.0.1:") && !strings.HasPrefix(r.Host, "localhost:") {
+	// 未配置 Origin 时按当前请求推导
+	if scheme == "http" && !settings.AllowInsecureOrigin && !isLoopbackHost(r.Host) {
 		return nil, fmt.Errorf("Passkey 仅支持 HTTPS，当前访问: %s://%s，请在 Passkey 设置中允许不安全 Origin 或配置 HTTPS", scheme, r.Host)
 	}
 	// 优先使用请求的完整Host（包含端口）
@@ -111,7 +119,7 @@ autoDetect:
 
 	// 如果无法从请求获取Host，尝试从ServerAddress获取
 	if host == "" && system_setting.ServerAddress != "" {
-		if parsed, err := url.Parse(system_setting.ServerAddress); err == nil && parsed.Host != "" {
+		if parsed, err := url.Parse(strings.TrimSpace(system_setting.ServerAddress)); err == nil && parsed.Host != "" {
 			host = parsed.Host
 			if scheme == "" && parsed.Scheme != "" {
 				scheme = parsed.Scheme
@@ -128,9 +136,74 @@ autoDetect:
 	return []string{origin}, nil
 }
 
+// splitOriginEntries 拆分多来源配置：兼容逗号、换行分隔，以及旧版前端写入的 JSON 数组格式。
+func splitOriginEntries(raw string) []string {
+	trimmed := strings.TrimSpace(raw)
+	if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
+		var list []string
+		if err := common.Unmarshal([]byte(trimmed), &list); err == nil {
+			return list
+		}
+	}
+	return strings.FieldsFunc(trimmed, func(ch rune) bool {
+		return ch == ',' || ch == '\n' || ch == '\r'
+	})
+}
+
+// normalizeOrigin 把配置项补全为完整 Origin（scheme://host[:port]）。
+// go-webauthn 的 Origin 校验只接受带协议的完整来源，缺少协议时会静默地永不匹配，
+// 最终在验证阶段抛出 "Error validating origin"。
+func normalizeOrigin(entry string, defaultScheme string) (string, error) {
+	value := strings.TrimSpace(entry)
+	value = strings.TrimSpace(strings.Trim(value, "\"'"))
+	if value == "" {
+		return "", nil
+	}
+
+	lower := strings.ToLower(value)
+	if strings.HasPrefix(lower, "android:apk-key-hash:") {
+		return value, nil
+	}
+
+	if defaultScheme == "" {
+		defaultScheme = "https"
+	}
+	if !strings.HasPrefix(lower, "http://") && !strings.HasPrefix(lower, "https://") {
+		if strings.Contains(value, "://") {
+			return "", fmt.Errorf("Passkey Origin 仅支持 http/https: %s", entry)
+		}
+		value = defaultScheme + "://" + value
+	}
+
+	parsed, err := url.Parse(value)
+	if err != nil || parsed.Host == "" {
+		return "", fmt.Errorf("Passkey Origin 格式无效: %s，应形如 https://example.com", entry)
+	}
+	if scheme := strings.ToLower(parsed.Scheme); scheme != "http" && scheme != "https" {
+		return "", fmt.Errorf("Passkey Origin 仅支持 http/https: %s", entry)
+	}
+	// 只保留来源部分，去掉路径、查询、用户信息
+	parsed.Path, parsed.RawPath, parsed.RawQuery, parsed.Fragment, parsed.Opaque, parsed.User = "", "", "", "", "", nil
+	return parsed.String(), nil
+}
+
+// isLoopbackHost 判断 Host 是否为本地调试地址（本地允许使用 http）。
+func isLoopbackHost(host string) bool {
+	switch hostWithoutPort(strings.ToLower(strings.TrimSpace(host))) {
+	case "localhost", "127.0.0.1", "::1", "[::1]":
+		return true
+	default:
+		return false
+	}
+}
+
 func resolveRPID(r *http.Request, settings *system_setting.PasskeySettings, origins []string) (string, error) {
 	rpID := strings.TrimSpace(settings.RPID)
 	if rpID != "" {
+		// 兼容填写完整地址（https://example.com）或带端口的情况
+		if parsed, err := url.Parse(rpID); err == nil && parsed.Host != "" {
+			rpID = parsed.Host
+		}
 		return hostWithoutPort(rpID), nil
 	}
 	if len(origins) == 0 {
