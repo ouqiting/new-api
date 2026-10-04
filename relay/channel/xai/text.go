@@ -40,10 +40,20 @@ func xAIStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 	var responseTextBuilder strings.Builder
 	var toolCount int
 	var containStreamUsage bool
+	var streamErr *types.NewAPIError
 
 	helper.SetEventStreamHeaders(c)
 
 	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
+		if inBandErr := helper.InBandStreamError(data); inBandErr != nil {
+			// 上游用 HTTP 200 + 流内错误对象表示失败：还没写给客户端时按渠道失败重试
+			if !c.Writer.Written() {
+				streamErr = types.WithOpenAIError(*inBandErr, http.StatusInternalServerError)
+				sr.Stop(streamErr)
+				return
+			}
+		}
+
 		var xAIResp *dto.ChatCompletionsStreamResponse
 		if err := common.UnmarshalJsonStr(data, &xAIResp); err != nil {
 			common.SysLog("error unmarshalling stream response: " + err.Error())
@@ -66,6 +76,10 @@ func xAIStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 			sr.Error(err)
 		}
 	})
+
+	if streamErr != nil {
+		return nil, streamErr
+	}
 
 	if !containStreamUsage {
 		usage = service.ResponseText2Usage(c, responseTextBuilder.String(), info.UpstreamModelName, info.GetEstimatePromptTokens())

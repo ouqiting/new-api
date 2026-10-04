@@ -121,11 +121,27 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 	var usage = &dto.Usage{}
 	var lastStreamData string
 	var secondLastStreamData string // 存储倒数第二个stream data，用于音频模型
+	var streamErr *types.NewAPIError
 
 	// 检查是否为音频模型
 	isAudioModel := strings.Contains(strings.ToLower(model), "audio")
 
 	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
+		if len(data) > 0 {
+			if inBandErr := helper.InBandStreamError(data); inBandErr != nil {
+				// 上游用 HTTP 200 + 流内错误对象表示失败（常见于内容审核拦截）。
+				// 客户端还没收到任何内容时，不转发该错误块，直接结束本次流，
+				// 让外层把这次调用判为渠道失败并切换下一渠道重试。
+				if !c.Writer.Written() {
+					streamErr = types.WithOpenAIError(*inBandErr, http.StatusInternalServerError)
+					sr.Stop(streamErr)
+					return
+				}
+				// 已经输出过内容，无法安全重试，保持原有行为把错误块交给客户端
+				logger.LogError(c, "upstream in-band stream error after the response had started: "+
+					types.WithOpenAIError(*inBandErr, http.StatusInternalServerError).Error())
+			}
+		}
 		if lastStreamData != "" {
 			if err := HandleStreamFormat(c, info, lastStreamData, info.ChannelSetting.ForceFormat, info.ChannelSetting.ThinkingToContent); err != nil {
 				common.SysLog("error handling stream format: " + err.Error())
@@ -145,6 +161,11 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 			}
 		}
 	})
+
+	if streamErr != nil {
+		// 尚未向客户端写入任何内容，可以安全地切换到下一个渠道重试
+		return nil, streamErr
+	}
 
 	// 对音频模型，从倒数第二个stream data中提取usage信息
 	if isAudioModel && secondLastStreamData != "" {
@@ -228,7 +249,7 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 	}
 
 	if oaiError := simpleResponse.GetOpenAIError(); oaiError != nil && oaiError.Type != "" {
-		return nil, types.WithOpenAIError(*oaiError, resp.StatusCode)
+		return nil, types.WithOpenAIError(*oaiError, helper.InBandErrorStatus(resp.StatusCode))
 	}
 
 	for _, choice := range simpleResponse.Choices {
